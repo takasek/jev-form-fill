@@ -54,7 +54,7 @@ def profile_fields(item):
             scope = 'mobile'
         sources.append({'role': role, 'label': label, 'scope': scope, 'value': value})
         if role == 'street-address':
-            codes = re.findall(r'(?<!\d)\d{3}[-－]\d{4}(?!\d)', value)
+            codes = re.findall(r'〒\s*([0-9０-９]{3}[-－][0-9０-９]{4})(?!\d)', value)
             if len(codes) == 1:
                 sources.append({'role': 'postal-code', 'label': label + ' (〒)', 'scope': scope, 'value': codes[0]})
     return sources

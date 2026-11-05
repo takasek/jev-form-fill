@@ -72,7 +72,9 @@ export function pageCommand(request) {
     if (request.privateFill) Object.assign(base,{
       group:JSON.stringify([Array.from(doc.forms).indexOf(element.form),
         Array.from(doc.querySelectorAll('fieldset,section,article')).indexOf(element.closest('fieldset,section,article')),
-        context(element,false)]),name:element.name,autocomplete:element.autocomplete,placeholder:element.placeholder,pattern:element.pattern,maxLength:element.maxLength,
+        context(element,false)]),sectionLabel:context(element,false),name:element.name,autocomplete:element.autocomplete,placeholder:element.placeholder,pattern:element.pattern,maxLength:element.maxLength,
+      minLength:element.minLength,min:element.min,max:element.max,step:element.step,multiple:element.multiple,
+      customStepBase:!element.min && !!element.getAttribute('value'),
       hint:clean((element.getAttribute('aria-describedby')||'').split(/\s+/).map(id=>doc.getElementById(id)?.textContent).filter(Boolean).join(' '))});
     if (entry.kind==='radio') {
       base.label=clean(element.closest('fieldset')?.querySelector('legend')?.textContent || element.name || base.label);
@@ -159,7 +161,9 @@ export function pageCommand(request) {
       const token=crypto.randomUUID();
       const entries=collect(token);
       if (entries.length>160) throw new Error('160項目を超えています。対象フォームを分けてください。');
-      const fields=entries.map(entry=>entry.descriptor);
+      const fields=entries.map(entry=>request.privateFill
+        ? {...entry.descriptor,occupied:value(entry) !== ''}
+        : entry.descriptor);
       if (request.privateFill) {
         // Headings returned to the local reviewer may contain an earlier private value.
         for (const entry of entries) {
@@ -216,6 +220,9 @@ export function pageCommand(request) {
               await snapshot(fingerprint,state.token)===await entry.fingerprint
             : before===entry.before;
           if (!matches || value(entry)!==before || state.url!==location.href || !current(entry,fingerprint)) {results.push({id:row.id,status:'skip',reason:'ページの項目または値が変わりました。'});continue;}
+          if (state.privatePlan && before !== '' && row.overwrite !== true) {
+            results.push({id:row.id,status:'skip',reason:'入力済みの値を保持しました。'});continue;
+          }
           if (value(entry)===row.value) {results.push({id:row.id,status:'unchanged',reason:'すでに同じ値です。'});continue;}
           if (!write(entry,row.value)) {results.push({id:row.id,status:'skip',reason:'この値は項目に設定できません。'});continue;}
           const after=value(entry);

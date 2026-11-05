@@ -64,5 +64,7 @@ test('an identity email is not automatically duplicated into a different personâ
   const fields=['Applicant','Emergency contact'].map((context,i)=>({id:'f'+i,kind:'text',type:'email',label:'Email',context}));
   await startReview(document,{scan:async()=>({fields}),native:async r=>r.op==='list'?{profile:true}:{fields:[
     {role:'email',label:'Email',value:'fixture@example.test'}]}},'en');
+  assert.ok(document.querySelector('#profileFill').disabled);
+  document.querySelector('#profileSections input').click();
   assert.deepEqual([...document.querySelectorAll('#profileRows select')].map(s=>s.value),['0','']);
 });

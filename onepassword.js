@@ -43,7 +43,8 @@ export async function startReview(doc, api, language) {
     textTargets.forEach((field, index) => {
       const caption = captions[index];
       const repeated = captions.indexOf(caption) !== captions.lastIndexOf(caption);
-      option(destination, field.id, repeated ? t('opNumbered', {caption, position:index + 1}) : caption);
+      const text = repeated ? t('opNumbered', {caption, position:index + 1}) : caption;
+      option(destination, field.id, field.occupied ? text + ' — ' + t('opOverwrite') : text);
     });
     source.disabled = false;
     source.onchange = async () => {
@@ -64,7 +65,7 @@ export async function startReview(doc, api, language) {
         if (typeof value !== 'string' || !value.length) throw new Error();
         preview.textContent = value;
         const matches = textTargets.filter(field => field.label === source.selectedOptions[0].textContent);
-        if (matches.length === 1) destination.value = matches[0].id;
+        if (matches.length === 1 && !matches[0].occupied) destination.value = matches[0].id;
         destination.disabled = false;
         fill.disabled = !destination.value;
         get('status').textContent = t('opReview');
@@ -78,6 +79,7 @@ export async function startReview(doc, api, language) {
       if (fill.disabled) return;
       source.disabled = destination.disabled = fill.disabled = true;
       const row = {id:destination.value, value:preview.textContent};
+      if (textTargets.find(field=>field.id===row.id)?.occupied) row.overwrite = true;
       preview.textContent = '';
       try {
         const [result] = await api.apply({op:'apply', privateFill:true, token:scan.token, rows:[row]});

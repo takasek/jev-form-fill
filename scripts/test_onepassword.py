@@ -38,3 +38,8 @@ class HostTests(unittest.TestCase):
             {'id':str(i),'type':'STRING','label':label,'value':'fixture'} for i,label in enumerate(labels)]}
         self.assertEqual([(f['role'],f['scope']) for f in profile_fields(item)],
                          [('email','work'),('street-address','home'),('name-kana',''),('address-line1','')])
+
+    def test_unmarked_lot_is_not_a_postcode(self):
+        from host import profile_fields
+        item = {'category':'IDENTITY','fields':[{'id':'address','label':'住所','type':'ADDRESS','value':'架空市若葉町123-4567'}]}
+        self.assertEqual([f['role'] for f in profile_fields(item)], ['street-address'])

@@ -19,7 +19,7 @@ function parcelParts(value) {
   value = value.trim().replace(/^〒\s*[0-9０-９]{3}[-－][0-9０-９]{4}\s*/, '');
   const digit = '[0-9０-９]+';
   const lot = digit+'(?:番地?(?:の)?'+digit+'号?|(?:[-－−]'+digit+'){1,2})';
-  const number = '(?:'+digit+'丁目)?'+lot;
+  const number = '(?:(?:'+digit+'|[〇零一二三四五六七八九十百]+)丁目)?'+lot;
   const matches = [...value.matchAll(new RegExp(number,'g'))];
   if (matches.length !== 1) return;
   const m = matches[0], prefix = value.slice(0,m.index).trimEnd(), tail = value.slice(m.index+m[0].length);
@@ -69,6 +69,11 @@ export function formatPhone(value, field) {
   }
   if (/ハイフン(?:は)?(?:なし|無し|不要)|数字のみ|digits only|no hyphens/i.test(text) ||
       /^(?:\\d|\[0-9\])(?:\+|\{\d+(?:,\d*)?\})$/.test(pattern) || field.maxLength === digits.length) return digits;
+  const example = (field.placeholder || '').normalize('NFKC').match(/^(?:例[：:]?\s*)?(0\d{1,4})-(\d{1,4})-(\d{4})$/);
+  if (!normalized.includes('-') && example && digits.startsWith(example[1]) && digits.length === example[1].length + example[2].length + example[3].length) {
+    const a=example[1].length, b=example[2].length;
+    return [digits.slice(0,a),digits.slice(a,a+b),digits.slice(a+b)].join('-');
+  }
   if (/ハイフン(?:あり|有り|付き|必須)|with hyphens/i.test(text)) return normalized.includes('-') ? normalized : undefined;
   return value;
 }
@@ -82,4 +87,21 @@ export function joinedName(family, given, field, original) {
   const separator = /(?:スペース|空白)(?:は)?(?:なし|無し|不要)/.test(hint) ? '' :
     /全角(?:の)?(?:スペース|空白)/.test(hint) ? '　' : ' ';
   return parts.join(separator);
+}
+
+export function formatContactValue(value, role, field) {
+  const hint = [field.label,field.placeholder,field.hint].filter(Boolean).join(' ');
+  if (role === 'postal-code') {
+    const digits = value.normalize('NFKC').replace(/^([0-9]{3})-([0-9]{4})$/, '$1$2');
+    if (/^\d{7}$/.test(digits)) {
+      if (field.maxLength === 7 || /ハイフン(?:なし|不要)|数字のみ/.test(hint) || /^(?:\\d|\[0-9\])\{7\}$/.test(field.pattern || '')) return digits;
+      if (/ハイフン(?:あり|必須)|\d{3}-\d{4}/.test(hint) || (field.pattern || '').includes('}-')) return digits.slice(0,3)+'-'+digits.slice(3);
+    }
+  }
+  if (role?.endsWith('-kana')) {
+    const compact = value.replace(/[ｦ-ﾟ]+/gu, part=>part.normalize('NFKC'));
+    if (/ひらがな|ふりがな|せい|めい/.test(hint)) return compact.replace(/[ァ-ヶ]/gu, c=>String.fromCharCode(c.charCodeAt(0)-96));
+    if (/カタカナ|フリガナ|セイ|メイ/.test(hint)) return compact.replace(/[ぁ-ゖ]/gu, c=>String.fromCharCode(c.charCodeAt(0)+96));
+  }
+  return value;
 }

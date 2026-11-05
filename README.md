@@ -39,7 +39,7 @@ Install the 1Password app and CLI (`op`) and enable CLI integration under Settin
 python3 native/install.py EXTENSION_ID --profile 'Vault name' IDENTITY_ITEM_ID
 ```
 
-Open **Fill from 1Password** on a form. Review the proposed names, addresses and contact details together. Change any source or choose **Leave this field alone**, then fill the selection in one click. Ambiguous matches and billing fields that duplicate shipping details are left for review. Text and single-select fields are supported. Private fills have no extension Undo history.
+Open **Fill from 1Password** on a form. Review the proposed names, addresses and contact details together. Change any source or choose **Leave this field alone**, then fill the selection in one click. On forms with multiple sections, select the sections for this identity. An existing value is kept unless you choose **Replace the existing value** on that row. Text and single-select fields are supported. Private fills have no extension Undo history.
 
 The preview adapts names to explicit spacing and order, phone numbers to known groups or exact digit widths, and Japanese addresses to supported parcel boundaries. Edit the proposed text directly when the boundary or format is unclear.
 

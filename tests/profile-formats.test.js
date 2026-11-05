@@ -104,3 +104,51 @@ test('distinct table row captions in the same form section still describe one ad
     [{label:'住所',context:'配送先 / 住所',group:'shipping'},{label:'番地',context:'配送先 / 番地',group:'shipping'}]);
   await ui.apply();assert.deepEqual(ui.writes.map(r=>r.value),['架空区若葉町','2-3-4']);
 });
+
+test('one section choice proposes only the selected person and excludes populated destinations',async()=>{
+  const sources=[{role:'name',label:'氏名',value:'山野 夏'},{role:'email',label:'email',value:'demo@example.test'}];
+  const ui=await review(sources,[
+    {context:'お迎えに来る保護者',group:'parent',label:'氏名'},
+    {context:'お迎えに来る保護者',group:'parent',label:'メール',occupied:true},
+    {context:'追加のお迎え担当者（任意）',group:'other',label:'氏名'}]);
+  const controls=[...ui.document.querySelectorAll('#profileSections input')];
+  assert.equal(controls.length,2);assert.ok(ui.document.querySelector('#profileFill').disabled);
+  controls[0].click();
+  assert.deepEqual([...ui.document.querySelectorAll('#profileRows textarea')].map(x=>x.value),['山野 夏','','']);
+  await ui.apply();assert.deepEqual(ui.writes,[{id:'f0',value:'山野 夏'}]);
+});
+
+test('fills a confirmation pair, converts kana and postcode, and keeps invalid edits correctable',async()=>{
+  const ui=await review([{role:'email',label:'Email',value:'a@example.test'},{role:'family-kana',label:'姓カナ',value:'アオノ'},
+    {role:'postal-code',label:'郵便番号',value:'123-4567'}],
+    [{label:'メールアドレス',type:'email'},{label:'メールアドレス（確認用）',type:'email'},
+     {label:'姓（ふりがな）',hint:'ひらがな'},{label:'郵便番号',pattern:'[0-9]{7}',maxLength:7}]);
+  const edits=[...ui.document.querySelectorAll('#profileRows textarea')];
+  assert.deepEqual(edits.map(x=>x.value),['a@example.test','a@example.test','あおの','1234567']);
+  edits[3].value='abc';edits[3].dispatchEvent(new ui.document.defaultView.Event('input'));
+  assert.equal(ui.document.querySelector('#profileFill').disabled,true);
+  edits[3].value='9999999';edits[3].dispatchEvent(new ui.document.defaultView.Event('input'));
+  await ui.apply();assert.equal(ui.writes[3].value,'9999999');
+});
+
+test('a third-party row inside the applicant section is not suggested',async()=>{
+  const ui=await review([{role:'email',label:'Email',value:'owner@example.test'}],[
+    {label:'メールアドレス',type:'email',context:'申込 / 緊急連絡先 メールアドレス',sectionLabel:'申込',group:'applicant'}]);
+  assert.equal(ui.document.querySelector('#map-f0').value,'');
+});
+
+test('an occupied field needs a per-row override; a section choice alone is insufficient',async()=>{
+  const ui=await review([{role:'family-name',label:'姓',value:'星野'}],[{label:'姓',occupied:true}]);
+  assert.ok(ui.document.querySelector('#profileFill').disabled);
+  ui.document.querySelector('.row input[type=checkbox]').click();
+  await ui.apply();assert.deepEqual(ui.writes,[{id:'f0',value:'星野',overwrite:true}]);
+});
+
+test('separate HTML autocomplete sections do not truncate another person’s address',async()=>{
+  const ui=await review([{role:'street-address',label:'住所',value:'架空区若葉町2-3-4'}],[
+    {label:'住所',context:'登録',group:'g',autocomplete:'section-applicant street-address'},
+    {label:'番地',context:'登録',group:'g',autocomplete:'section-friend address-line1'}]);
+  const control=ui.document.querySelector('#profileSections input');
+  assert.match(control.parentElement.textContent,/applicant/);control.click();
+  await ui.apply();assert.deepEqual(ui.writes,[{id:'f0',value:'架空区若葉町2-3-4'}]);
+});
