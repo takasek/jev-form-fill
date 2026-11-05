@@ -29,7 +29,7 @@ export function pageCommand(request) {
     const labelled=(element.getAttribute('aria-labelledby')||'').split(/\s+/).map(id=>doc.getElementById(id)?.textContent).filter(Boolean).join(' ');
     return clean(labels.join(' / ') || aria || labelled || element.placeholder || element.name || element.id);
   }
-  function context(element) {
+  function context(element,includeRow=true) {
     const form=element.form || element.closest('form') || doc.body;
     const scopes=[];
     for(let parent=element.parentElement;parent&&parent!==form;parent=parent.parentElement)if(parent.matches('section,article'))scopes.unshift(parent);
@@ -48,7 +48,7 @@ export function pageCommand(request) {
       headings.push(...outline.map(x=>x.text));
     }
     const legend=element.closest('fieldset')?.querySelector('legend')?.textContent;
-    const row=element.closest('li,tr,[role=group]');
+    const row=includeRow && element.closest('li,tr,[role=group]');
     let rowText='';
     if (row) {const clone=row.cloneNode(true);clone.querySelectorAll('input,select,textarea,button,details,a,[role=menu]').forEach(x=>x.remove());rowText=clean(clone.textContent);}
     return clean([...headings,legend,rowText].filter(Boolean).join(' / '));
@@ -69,7 +69,11 @@ export function pageCommand(request) {
   function describe(entry,id) {
     const element=entry.elements[0];
     const base={id,kind:entry.kind,label:label(element),context:context(element),type:element.type||element.tagName.toLowerCase(),required:element.required};
-    if (request.privateFill) Object.assign(base,{name:element.name,autocomplete:element.autocomplete});
+    if (request.privateFill) Object.assign(base,{
+      group:JSON.stringify([Array.from(doc.forms).indexOf(element.form),
+        Array.from(doc.querySelectorAll('fieldset,section,article')).indexOf(element.closest('fieldset,section,article')),
+        context(element,false)]),name:element.name,autocomplete:element.autocomplete,placeholder:element.placeholder,pattern:element.pattern,maxLength:element.maxLength,
+      hint:clean((element.getAttribute('aria-describedby')||'').split(/\s+/).map(id=>doc.getElementById(id)?.textContent).filter(Boolean).join(' '))});
     if (entry.kind==='radio') {
       base.label=clean(element.closest('fieldset')?.querySelector('legend')?.textContent || element.name || base.label);
       base.options=entry.elements.map(x=>({value:x.value,label:label(x)}));

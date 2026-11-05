@@ -14,11 +14,11 @@ BUILTIN_ROLES = {'firstname': 'given-name', 'lastname': 'family-name', 'company'
                  'address': 'street-address', 'defphone': 'tel', 'homephone': 'tel',
                  'cellphone': 'tel', 'busphone': 'tel', 'email': 'email'}
 LABEL_ROLES = {
-    '氏名': 'name', 'fullname': 'name', '氏名カナ': 'name-kana', 'フリガナ': 'name-kana',
+    '氏名': 'name', '氏名姓名': 'name', '氏名名姓': 'name', 'fullname': 'name', '氏名カナ': 'name-kana', 'フリガナ': 'name-kana',
     '姓': 'family-name', '名': 'given-name', 'セイ': 'family-kana', 'メイ': 'given-kana',
     '姓カナ': 'family-kana', '名カナ': 'given-kana', '姓ふりがな': 'family-kana', '名ふりがな': 'given-kana',
     '郵便番号': 'postal-code', 'zipcode': 'postal-code', 'postalcode': 'postal-code',
-    '都道府県': 'address-level1', '市区町村': 'address-level2', '番地': 'address-line1',
+    '都道府県': 'address-level1', '市区町村': 'address-level2', '番地': 'parcel', '地番': 'parcel',
     '建物名': 'address-line2', '住所': 'street-address', 'メールアドレス': 'email',
     'address': 'street-address', '住所1': 'address-line1', '住所2': 'address-line2',
     'ふりがな': 'name-kana', '氏名フリガナ': 'name-kana', '氏名ふりがな': 'name-kana',

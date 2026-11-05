@@ -41,6 +41,8 @@ python3 native/install.py EXTENSION_ID --profile 'Vault name' IDENTITY_ITEM_ID
 
 Open **Fill from 1Password** on a form. Review the proposed names, addresses and contact details together. Change any source or choose **Leave this field alone**, then fill the selection in one click. Ambiguous matches and billing fields that duplicate shipping details are left for review. Text and single-select fields are supported. Private fills have no extension Undo history.
 
+The preview adapts names to explicit spacing and order, phone numbers to known groups or exact digit widths, and Japanese addresses to supported parcel boundaries. Edit the proposed text directly when the boundary or format is unclear.
+
 Rerun the installer to switch identities. Existing `--field` configurations still support individual fills. Use `--chrome-data` for a custom Chrome data directory. To uninstall, remove `local.jev_form_fill.onepassword.json` and the `local.jev_form_fill.onepassword` folder from its `NativeMessagingHosts` folder.
 
 ## Install
