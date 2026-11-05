@@ -1,4 +1,5 @@
 import {translator, localizeMessage} from './i18n.js';
+import {reviewProfile} from './profile.js';
 import {pageCommand} from './page.js';
 
 export async function startReview(doc, api, language) {
@@ -17,15 +18,29 @@ export async function startReview(doc, api, language) {
   try {
     scan = await api.scan();
     get('target').textContent = scan.url;
-    const targets = scan.fields.filter(field => field.kind === 'text');
+    const targets = scan.fields.filter(field => ['text','select'].includes(field.kind));
     if (!targets.length) { get('status').textContent = t('opNoFields'); return; }
-    const {fields} = await api.native({op:'list'});
+    const registration = await api.native({op:'list'});
+    if (registration.profile) {
+      get('status').textContent = t('opProfileReading');
+      const profile = await api.native({op:'profile'});
+      if (!profile.fields?.length) {
+        get('status').textContent = t(profile.error ? 'opProfileError' : 'opEmptyProfile');
+        return;
+      }
+      reviewProfile(doc,scan,targets,profile.fields,api,t,reason=>localizeMessage(reason,language));
+      return;
+    }
+    const textTargets = targets.filter(f => f.kind === 'text');
+    if (!textTargets.length) { get('status').textContent = t('opNoFields'); return; }
+    get('legacyReview').hidden = false;
+    const {fields} = registration;
     if (!fields?.length) throw new Error();
     option(source, '', t('opChoose'));
     for (const field of fields) option(source, field.id, field.label);
     option(destination, '', t('opChoose'));
-    const captions = targets.map(field => [field.context, field.label].filter(Boolean).join(' / '));
-    targets.forEach((field, index) => {
+    const captions = textTargets.map(field => [field.context, field.label].filter(Boolean).join(' / '));
+    textTargets.forEach((field, index) => {
       const caption = captions[index];
       const repeated = captions.indexOf(caption) !== captions.lastIndexOf(caption);
       option(destination, field.id, repeated ? t('opNumbered', {caption, position:index + 1}) : caption);
@@ -48,7 +63,7 @@ export async function startReview(doc, api, language) {
         }
         if (typeof value !== 'string' || !value.length) throw new Error();
         preview.textContent = value;
-        const matches = targets.filter(field => field.label === source.selectedOptions[0].textContent);
+        const matches = textTargets.filter(field => field.label === source.selectedOptions[0].textContent);
         if (matches.length === 1) destination.value = matches[0].id;
         destination.disabled = false;
         fill.disabled = !destination.value;

@@ -2,13 +2,75 @@
 """Chrome native messaging host for explicitly registered 1Password fields."""
 import json
 import os
+import re
+import unicodedata
 from pathlib import Path
 import struct
 import subprocess
 import sys
 
 
-def handle(request, config, read):
+BUILTIN_ROLES = {'firstname': 'given-name', 'lastname': 'family-name', 'company': 'organization',
+                 'address': 'street-address', 'defphone': 'tel', 'homephone': 'tel',
+                 'cellphone': 'tel', 'busphone': 'tel', 'email': 'email'}
+LABEL_ROLES = {
+    '氏名': 'name', 'fullname': 'name', '氏名カナ': 'name-kana', 'フリガナ': 'name-kana',
+    '姓': 'family-name', '名': 'given-name', 'セイ': 'family-kana', 'メイ': 'given-kana',
+    '姓カナ': 'family-kana', '名カナ': 'given-kana', '姓ふりがな': 'family-kana', '名ふりがな': 'given-kana',
+    '郵便番号': 'postal-code', 'zipcode': 'postal-code', 'postalcode': 'postal-code',
+    '都道府県': 'address-level1', '市区町村': 'address-level2', '番地': 'address-line1',
+    '建物名': 'address-line2', '住所': 'street-address', 'メールアドレス': 'email',
+    'address': 'street-address', '住所1': 'address-line1', '住所2': 'address-line2',
+    'ふりがな': 'name-kana', '氏名フリガナ': 'name-kana', '氏名ふりがな': 'name-kana',
+    '姓フリガナ': 'family-kana', '名フリガナ': 'given-kana',
+    'firstname': 'given-name', 'lastname': 'family-name', 'メール': 'email',
+    'phone': 'tel', 'phonenumber': 'tel', 'email': 'email', '電話番号': 'tel', '携帯電話': 'tel', '会社名': 'organization'
+}
+
+
+def profile_fields(item):
+    if item.get('category') != 'IDENTITY':
+        return []
+    sources = []
+    for field in item.get('fields', []):
+        label, value = field.get('label', ''), field.get('value')
+        kind = field.get('type')
+        if (field.get('purpose') or kind not in {'STRING', 'EMAIL', 'ADDRESS', 'PHONE'}
+                or not isinstance(value, str) or not value.strip() or len(value) > 4096):
+            continue
+        key = re.sub(r'[\s_()（）-]', '', unicodedata.normalize('NFKC', label).lower())
+        base_key = re.sub(r'^(?:仕事用|勤務先|職場|自宅|work|business|home)(?:の)?', '', key)
+        role = BUILTIN_ROLES.get(field['id']) or LABEL_ROLES.get(key) or LABEL_ROLES.get(base_key)
+        if not role:
+            role = {'EMAIL': 'email', 'ADDRESS': 'street-address', 'PHONE': 'tel'}.get(kind)
+        if not role:
+            continue
+        scope = ''
+        if field['id'] == 'busphone' or re.search(r'仕事用|勤務先|職場|会社|work|business', label, re.I):
+            scope = 'work'
+        elif field['id'] == 'homephone' or re.search(r'自宅|home', label, re.I):
+            scope = 'home'
+        elif field['id'] == 'cellphone' or re.search(r'携帯|mobile|cell', label, re.I):
+            scope = 'mobile'
+        sources.append({'role': role, 'label': label, 'scope': scope, 'value': value})
+        if role == 'street-address':
+            codes = re.findall(r'(?<!\d)\d{3}[-－]\d{4}(?!\d)', value)
+            if len(codes) == 1:
+                sources.append({'role': 'postal-code', 'label': label + ' (〒)', 'scope': scope, 'value': codes[0]})
+    return sources
+
+
+def handle(request, config, read, read_item=None):
+    if 'profile' in config:
+        if request == {'op': 'list'}:
+            return {'profile': True}
+        if request != {'op': 'profile'}:
+            return {'error': 'unknown-field'}
+        registered = config['profile']
+        fields = profile_fields(read_item(registered['vault'], registered['item']))
+        if len(json.dumps(fields, ensure_ascii=False).encode('utf-8')) > 800_000:
+            return {'error': 'profile-too-large'}
+        return {'fields': fields}
     fields = config['fields']
     if request == {'op': 'list'}:
         return {'fields': [{'id': key, 'label': field['label']} for key, field in fields.items()]}
@@ -22,9 +84,9 @@ def handle(request, config, read):
     return {'value': value}
 
 
-def read_field(op, ref):
+def run_op(op, *args):
     env = {k: v for k, v in os.environ.items() if not k.startswith('OP_')}
-    result = subprocess.run([op, 'read', '--no-newline', ref], stdin=subprocess.DEVNULL,
+    result = subprocess.run([op, *args], stdin=subprocess.DEVNULL,
                             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                             timeout=180, check=True, env=env)
     return result.stdout.decode('utf-8')
@@ -39,7 +101,9 @@ def main():
         if length > 1024:
             raise ValueError('message')
         request = json.loads(sys.stdin.buffer.read(length))
-        reply = handle(request, config, lambda ref: read_field(config['op'], ref))
+        op = config['op']
+        reply = handle(request, config, lambda ref: run_op(op, 'read', '--no-newline', ref),
+                       lambda vault, item: json.loads(run_op(op, 'item', 'get', item, '--vault=' + vault, '--format=json')))
     except subprocess.TimeoutExpired:
         reply = {'error': 'timeout'}
     except subprocess.CalledProcessError as error:

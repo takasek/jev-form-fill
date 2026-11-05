@@ -1,6 +1,13 @@
 export const messages = {
   "opNumbered": {"en":"{caption} (field {position})","ja":"{caption}（上から {position} 番目）"},
   "opPrivatePage": {"en":"1Password was used on this page. Reload the form before creating AI proposals.","ja":"このページには 1Password から入力しました。AI の候補を作るにはフォームを再読み込みしてください。"},
+  "opProfileReading": {"en":"Reading your registered identity…","ja":"登録した身元情報を読み取り中…"},
+  "opProfileError": {"en":"Could not read the identity. Check 1Password and reopen the review.","ja":"身元情報を読み取れませんでした。1Password を確認して開き直してください。"},
+  "opEmptyProfile": {"en":"This identity has no supported contact information.","ja":"この身元情報に入力できる氏名・住所・連絡先がありません。"},
+  "opSkip": {"en":"Leave this field alone","ja":"入力しない"},
+  "opFillMany": {"en":"Fill {count} fields","ja":"{count} 件をまとめて入力"},
+  "opBatchHint": {"en":"Check the proposed values. Change or skip any row before filling.","ja":"入力案を確認し、必要な欄だけ選び直してください。"},
+  "opBatchResult": {"en":"Filled {filled} of {total} selected fields.","ja":"選択した {total} 件のうち {filled} 件に入力しました。"},
   "opOpen": {"en": "Fill from 1Password", "ja": "1Password から入力"},
   "opField": {"en": "1Password field", "ja": "1Password の項目"},
   "opChoose": {"en": "Choose a field…", "ja": "項目を選択…"},

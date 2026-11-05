@@ -16,17 +16,17 @@
 
 表示言語はブラウザに合わせて英語・日本語を選びます。拡張上部のLanguage／表示言語でも切り替えられます。フォームの項目名や入力値は翻訳しません。
 
-## Mac で 1Password から入力する
+## Mac で 1Password のプロフィールから一括入力する
 
-1Password デスクトップアプリと CLI (`op`) を用意し、1Password の「設定 → 開発者」で CLI との統合を有効にしてください。`chrome://extensions` で Jev Form Fill の ID を確認します。登録するアイテムの各フィールドで「シークレット参照をコピー」を選び、拡張のフォルダで次を実行してください（Python 3.9 以降）。
+Mac の 1Password アプリと CLI（`op`）を用意し、「設定 → 開発者」で CLI との統合を有効にします。初回にフォーム入力に使う「身元情報」を1つ選び、保管庫名とアイテム ID を指定してください。アイテムのメニューから ID をコピーできます。拡張 ID は `chrome://extensions` で確認します。拡張フォルダで Python 3.9 以降を使って次を実行します。
 
 ```sh
-python3 native/install.py EXTENSION_ID --field '氏名' 'op://Demo/Profile/name' --field '仕事用メール' 'op://Demo/Profile/work-email'
+python3 native/install.py EXTENSION_ID --profile '保管庫名' IDENTITY_ITEM_ID
 ```
 
-ID と参照は自分のものに置き換えてください。フォームで拡張を開き「1Password から入力」を押すと、別ウィンドウで登録した項目を選べます。表示された値と入力先を確認し、必要なら入力先を選び直して「この欄に入力」を押します。一度にテキスト欄ひとつを入力します。1Password の値を使った入力は拡張の Undo 対象外です。
+フォーム上で「1Password から入力」を押すと、氏名・住所・連絡先の入力案がまとまって表示されます。入力先の見出しとプレビューを確認し、違う欄だけプルダウンで選び直して「まとめて入力」を押します。各欄で「入力しない」も選べます。対応候補が複数ある欄や、配送先と同じ情報を求める請求先は手動で選択します。テキスト欄と単一選択欄に対応します。1Password からの入力は Undo 対象外です。
 
-登録時と同じコマンドに使いたい全項目を指定すると一覧を更新できます。別の Chrome データディレクトリには `--chrome-data` を指定します。ヘルパーの削除は Chrome のユーザーデータディレクトリの `NativeMessagingHosts` 内で `local.jev_form_fill.onepassword.json` と `local.jev_form_fill.onepassword` フォルダを削除してください。
+プロフィールを変更するときは設定コマンドを再実行します。従来の `--field` 設定は個別入力として利用できます。別の Chrome データディレクトリには `--chrome-data` を指定してください。削除する場合は Chrome のユーザーデータディレクトリの `NativeMessagingHosts` 内の `local.jev_form_fill.onepassword.json` と `local.jev_form_fill.onepassword` フォルダを削除します。
 
 ## インストール
 

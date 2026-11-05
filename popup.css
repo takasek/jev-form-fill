@@ -3,3 +3,4 @@
 .language-control{margin-left:auto;max-width:145px}.language-control label{display:block;font-size:10px;color:#63747d;margin-bottom:4px}.language-control select{max-width:145px;font:inherit;font-size:11px;border:1px solid #ccd7db;border-radius:6px;padding:5px;color:#294851;background:white}
 
 #onepassword{margin-bottom:16px}.review{width:auto;max-width:620px;max-height:none}.review select{display:block;width:100%;padding:9px;margin-bottom:18px;background:white;color:inherit;border:1px solid #ccd7db;border-radius:8px;font:inherit}.review output{min-height:38px;margin-bottom:18px;white-space:pre-wrap;overflow-wrap:anywhere}
+#profileRows .row label{display:block;font-weight:650;margin-bottom:6px}#profileRows select{margin-bottom:4px}#profileRows output{display:block;color:#156a61;white-space:pre-wrap;overflow-wrap:anywhere}

@@ -69,6 +69,7 @@ export function pageCommand(request) {
   function describe(entry,id) {
     const element=entry.elements[0];
     const base={id,kind:entry.kind,label:label(element),context:context(element),type:element.type||element.tagName.toLowerCase(),required:element.required};
+    if (request.privateFill) Object.assign(base,{name:element.name,autocomplete:element.autocomplete});
     if (entry.kind==='radio') {
       base.label=clean(element.closest('fieldset')?.querySelector('legend')?.textContent || element.name || base.label);
       base.options=entry.elements.map(x=>({value:x.value,label:label(x)}));
@@ -85,7 +86,7 @@ export function pageCommand(request) {
     for (const element of doc.querySelectorAll('input,textarea,select')) {
       if (seen.has(element) || !allowed(element)) continue;
       const kind=element.type==='radio'?'radio':element.type==='checkbox'?'checkbox':element.tagName==='SELECT'?'select':'text';
-      if (request.privateFill && kind!=='text') continue;
+      if (request.privateFill && !['text','select'].includes(kind)) continue;
       let elements=[element];
       if (kind==='radio' && element.name) {
         elements=Array.from(doc.querySelectorAll('input[type=radio]')).filter(x=>x.name===element.name && x.form===element.form);
@@ -131,7 +132,7 @@ export function pageCommand(request) {
       setter(entry.elements[0],'checked',newValue);
     } else {
       if (typeof newValue!=='string') return false;
-      if (entry.kind==='select' && !entry.descriptor.options.some(x=>x.value===newValue)) return false;
+      if (entry.kind==='select' && !describe(entry,entry.descriptor.id).options.some(x=>x.value===newValue)) return false;
       const element=entry.elements[0];
       if (!restoring) {
         if (element.maxLength>=0 && newValue.length>element.maxLength) return false;

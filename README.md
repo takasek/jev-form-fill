@@ -31,17 +31,17 @@ Do not subscribe to the newsletter.
 The telephone number is unknown; leave it unchanged.
 ```
 
-## Fill from 1Password on Mac
+## Fill a form from a 1Password identity on Mac
 
-Install the 1Password desktop app and CLI (`op`), then enable CLI integration in 1Password Settings → Developer. Find Jev Form Fill’s extension ID on `chrome://extensions`. In 1Password, choose **Copy Secret Reference** on each field you want to allow. From the extension folder run the following with Python 3.9 or later.
+Install the 1Password app and CLI (`op`) and enable CLI integration under Settings → Developer. Choose one Identity item, copy its item ID, and find the extension ID on `chrome://extensions`. Run this once from the extension folder with Python 3.9 or later.
 
 ```sh
-python3 native/install.py EXTENSION_ID --field 'Full name' 'op://Demo/Profile/name' --field 'Work email' 'op://Demo/Profile/work-email'
+python3 native/install.py EXTENSION_ID --profile 'Vault name' IDENTITY_ITEM_ID
 ```
 
-Substitute your extension ID and references. Open the extension on a form and click **Fill from 1Password**. In the review window, choose a registered field, check the value and select or correct its destination. Click **Fill this field** to write one text field. The extension’s Undo applies only to the TypeSafe flow.
+Open **Fill from 1Password** on a form. Review the proposed names, addresses and contact details together. Change any source or choose **Leave this field alone**, then fill the selection in one click. Ambiguous matches and billing fields that duplicate shipping details are left for review. Text and single-select fields are supported. Private fills have no extension Undo history.
 
-To update the list, rerun the installer with all desired fields. Use `--chrome-data` for a custom Chrome user data directory. To uninstall the helper, remove `local.jev_form_fill.onepassword.json` and the `local.jev_form_fill.onepassword` folder from that directory’s `NativeMessagingHosts` folder.
+Rerun the installer to switch identities. Existing `--field` configurations still support individual fills. Use `--chrome-data` for a custom Chrome data directory. To uninstall, remove `local.jev_form_fill.onepassword.json` and the `local.jev_form_fill.onepassword` folder from its `NativeMessagingHosts` folder.
 
 ## Install
 
