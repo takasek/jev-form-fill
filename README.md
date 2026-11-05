@@ -31,6 +31,18 @@ Do not subscribe to the newsletter.
 The telephone number is unknown; leave it unchanged.
 ```
 
+## Fill from 1Password on Mac
+
+Install the 1Password desktop app and CLI (`op`), then enable CLI integration in 1Password Settings → Developer. Find Jev Form Fill’s extension ID on `chrome://extensions`. In 1Password, choose **Copy Secret Reference** on each field you want to allow. From the extension folder run the following with Python 3.9 or later.
+
+```sh
+python3 native/install.py EXTENSION_ID --field 'Full name' 'op://Demo/Profile/name' --field 'Work email' 'op://Demo/Profile/work-email'
+```
+
+Substitute your extension ID and references. Open the extension on a form and click **Fill from 1Password**. In the review window, choose a registered field, check the value and select or correct its destination. Click **Fill this field** to write one text field. The extension’s Undo applies only to the TypeSafe flow.
+
+To update the list, rerun the installer with all desired fields. Use `--chrome-data` for a custom Chrome user data directory. To uninstall the helper, remove `local.jev_form_fill.onepassword.json` and the `local.jev_form_fill.onepassword` folder from that directory’s `NativeMessagingHosts` folder.
+
 ## Install
 
 No build step or Node.js is required to use the extension.
@@ -76,7 +88,7 @@ Requests go directly to `https://api.typesafe.ai/v1/systemone`, using `jev-lates
 
 Fields are analyzed in batches of eight, with 1–4 API requests per batch. HTTP failures are not retried automatically. Saved API keys use `chrome.storage.local`, not Chrome sync or an OS credential vault. See [PRIVACY.md](PRIVACY.md) for details.
 
-Permissions: `activeTab`, `scripting`, `storage`, `clipboardRead`, and the TypeSafe API host. Form input events may cause the destination site to transmit values before you submit.
+Permissions: `activeTab`, `scripting`, `storage`, `clipboardRead`, the TypeSafe API host, and `nativeMessaging` for the 1Password helper. Form input events may cause the destination site to transmit values before you submit.
 
 ## Try the demo and run tests
 

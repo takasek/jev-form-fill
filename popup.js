@@ -7,7 +7,7 @@ let tabId,plan=null,rows=[],controller=null,busy=false,sourceVersion=0;
 const browserLanguage=chrome.i18n?.getUILanguage?.()||navigator.language||'en';
 let language=resolveLanguage(undefined,browserLanguage),t=translator(language);
 const status=(text,error=false)=>{$('status').textContent=localizeMessage(text,language);$('status').classList.toggle('error',error);};
-function buttons(value) {busy=value;for(const id of ['analyze','apply','undo','clipboard','save-key','forget-key','clear','api-key','remember','language']) $(id).disabled=value; $('source').readOnly=value;document.querySelectorAll('#rows input').forEach(x=>{x.disabled=value;});$('cancel').hidden=!value; $('apply').disabled=value || !plan || !rows.some(x=>x.status==='ready');}
+function buttons(value) {busy=value;for(const id of ['analyze','onepassword','apply','undo','clipboard','save-key','forget-key','clear','api-key','remember','language']) $(id).disabled=value; $('source').readOnly=value;document.querySelectorAll('#rows input').forEach(x=>{x.disabled=value;});$('cancel').hidden=!value; $('apply').disabled=value || !plan || !rows.some(x=>x.status==='ready');}
 function localizeUI() {
   document.documentElement.lang=language;
   document.querySelectorAll('[data-i18n]').forEach(element=>{element.textContent=t(element.dataset.i18n);});
@@ -51,6 +51,13 @@ $('language').addEventListener('change',()=>run(async()=>{
   language=resolveLanguage(preference,browserLanguage);t=translator(language);localizeUI();
   if(rows.length)render(selectedIds);
 }));
+$('onepassword').addEventListener('click',()=>run(async()=>{
+  if (!tabId) throw new Error(t('webOnly'));
+  const [frame] = await chrome.scripting.executeScript({target:{tabId},func:()=>location.protocol});
+  if (!frame?.documentId || !['http:', 'https:'].includes(frame.result)) throw new Error(t('opPageError'));
+  const params = new URLSearchParams({tab:String(tabId), document:frame.documentId, lang:language});
+  await chrome.windows.create({type:'popup', width:550, height:540, url:chrome.runtime.getURL('onepassword.html?' + params)});
+}));
 $('source').addEventListener('input',invalidate);
 $('clear').addEventListener('click',()=>{$('source').value='';invalidate();status('文章を消しました。');});
 $('clipboard').addEventListener('click',async()=>{
@@ -74,6 +81,7 @@ $('analyze').addEventListener('click',()=>run(async()=>{
   controller=new AbortController();
   const signal=controller.signal;
   const scan=await command({op:'scan'});
+  if(scan.privatePage) throw new Error(t('opPrivatePage'));
   if(!scan.fields.length) throw new Error('対応するフォーム項目が見つかりませんでした。折りたたまれた項目を開いてから、もう一度試してください。');
   const analyzed=await evaluate(source,scan.fields,body=>callJev(body,key,{signal}),message=>status(message));
   signal.throwIfAborted();

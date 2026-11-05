@@ -5,6 +5,7 @@ from pathlib import Path
 import zipfile
 
 FILES = ('manifest.json', 'popup.html', 'popup.css', 'popup.js', 'core.js',
+         'onepassword.html', 'onepassword.js', 'native/host.py', 'native/install.py',
          'page.js', 'client.js', 'i18n.js', '_locales/en/messages.json',
          '_locales/ja/messages.json', 'README.md', 'README.ja.md', 'PRIVACY.md', 'PRIVACY.ja.md', 'LICENSE',
          'docs/images/review-proposals.jpg', 'docs/images/filled-form.jpg')

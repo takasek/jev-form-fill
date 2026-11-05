@@ -13,3 +13,7 @@ The clipboard is read only when you click **Read clipboard**. Source text and di
 Filled values are visible to the destination website. Its input/change handlers may send them to its server before you submit. The extension never submits forms automatically.
 
 There is no analytics or application backend. GitHub distributes the code and does not receive extension analysis requests. The local test server records submitted fictional data under `.local/form-fill-lab/receipts/` on your computer; that directory is excluded from Git.
+
+The optional macOS Native Messaging helper stores configuration, field references and display labels. Choosing a field reads its value for the local review window and the selected destination only. The value is excluded from diagnostics, extension storage, undo history, and AI requests. Closing the review window discards the preview. The destination website can read the filled value.
+
+After a 1Password fill, the extension blocks AI analysis of that document because the site could copy the value into field labels or headings.

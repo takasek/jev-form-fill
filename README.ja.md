@@ -16,6 +16,18 @@
 
 表示言語はブラウザに合わせて英語・日本語を選びます。拡張上部のLanguage／表示言語でも切り替えられます。フォームの項目名や入力値は翻訳しません。
 
+## Mac で 1Password から入力する
+
+1Password デスクトップアプリと CLI (`op`) を用意し、1Password の「設定 → 開発者」で CLI との統合を有効にしてください。`chrome://extensions` で Jev Form Fill の ID を確認します。登録するアイテムの各フィールドで「シークレット参照をコピー」を選び、拡張のフォルダで次を実行してください（Python 3.9 以降）。
+
+```sh
+python3 native/install.py EXTENSION_ID --field '氏名' 'op://Demo/Profile/name' --field '仕事用メール' 'op://Demo/Profile/work-email'
+```
+
+ID と参照は自分のものに置き換えてください。フォームで拡張を開き「1Password から入力」を押すと、別ウィンドウで登録した項目を選べます。表示された値と入力先を確認し、必要なら入力先を選び直して「この欄に入力」を押します。一度にテキスト欄ひとつを入力します。1Password の値を使った入力は拡張の Undo 対象外です。
+
+登録時と同じコマンドに使いたい全項目を指定すると一覧を更新できます。別の Chrome データディレクトリには `--chrome-data` を指定します。ヘルパーの削除は Chrome のユーザーデータディレクトリの `NativeMessagingHosts` 内で `local.jev_form_fill.onepassword.json` と `local.jev_form_fill.onepassword` フォルダを削除してください。
+
 ## インストール
 
 Chrome 116以上が対象です。ビルドやNode.jsのインストールは不要です。GitHubから配布するソースをローカルで読み込む方式です。
@@ -61,7 +73,7 @@ Chrome 116以上が対象です。ビルドやNode.jsのインストールは不
 
 8項目ずつ分析し、1バッチあたり1〜4回のAPI要求を行います。HTTPエラーの自動再試行はしません。APIキーは通常、開いているポップアップ内だけに保持します。保存を明示した場合だけ `chrome.storage.local` に保存します。詳細は [PRIVACY.ja.md](PRIVACY.ja.md) を参照してください。
 
-権限は `activeTab`、`scripting`、`storage`、`clipboardRead` とTypeSafe APIホストのみです。
+権限は `activeTab`、`scripting`、`storage`、`clipboardRead`、TypeSafe API ホスト、1Password 連携用の `nativeMessaging` です。
 
 ## 試験と開発
 

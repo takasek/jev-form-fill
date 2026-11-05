@@ -1,4 +1,19 @@
 export const messages = {
+  "opNumbered": {"en":"{caption} (field {position})","ja":"{caption}（上から {position} 番目）"},
+  "opPrivatePage": {"en":"1Password was used on this page. Reload the form before creating AI proposals.","ja":"このページには 1Password から入力しました。AI の候補を作るにはフォームを再読み込みしてください。"},
+  "opOpen": {"en": "Fill from 1Password", "ja": "1Password から入力"},
+  "opField": {"en": "1Password field", "ja": "1Password の項目"},
+  "opChoose": {"en": "Choose a field…", "ja": "項目を選択…"},
+  "opPreview": {"en": "Value to fill", "ja": "入力する値"},
+  "opDestination": {"en": "Destination on the form", "ja": "フォームの入力先"},
+  "opFill": {"en": "Fill this field", "ja": "この欄に入力"},
+  "opReview": {"en": "Check the value and destination before filling.", "ja": "値と入力先を確認してください。"},
+  "opNoFields": {"en": "No eligible text fields on this form.", "ja": "このフォームには入力できるテキスト欄がありません。"},
+  "opSetup": {"en": "Set up the macOS helper and register a field using the README, then reopen from the form.", "ja": "README の手順で Mac 用ヘルパーを設定し、項目を登録してからフォームで開き直してください。"},
+  "opReading": {"en": "Reading the field. Approve the request in 1Password if prompted.", "ja": "読み取り中です。1Password の認証が表示されたら承認してください。"},
+  "opAuthError": {"en":"1Password authorization expired or was declined. Select the field to try again.","ja":"1Password の認証が完了しませんでした。項目を選び直してください。"},
+  "opReadError": {"en": "Could not read this field. Check 1Password and select the field again.", "ja": "読み取れませんでした。1Password を確認し、項目を選び直してください。"},
+  "opPageError": {"en": "Reopen Jev Form Fill on the target form and try again.", "ja": "対象フォームで Jev Form Fill を開き直してください。"},
   "subtitle": {
     "en": "Copied text. The right fields.",
     "ja": "コピーした文章を、今のフォームへ。"

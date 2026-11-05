@@ -76,11 +76,16 @@ export function pageCommand(request) {
     if (entry.kind==='select') base.options=Array.from(element.options).filter(x=>!x.disabled && !x.closest('optgroup[disabled]')).map(x=>({value:x.value,label:clean(x.textContent)}));
     return base;
   }
-  function collect() {
+  async function snapshot(text, token) {
+    const bytes=new TextEncoder().encode(token + text);
+    return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes))).join(',');
+  }
+  function collect(token) {
     const entries=[],seen=new Set();
     for (const element of doc.querySelectorAll('input,textarea,select')) {
       if (seen.has(element) || !allowed(element)) continue;
       const kind=element.type==='radio'?'radio':element.type==='checkbox'?'checkbox':element.tagName==='SELECT'?'select':'text';
+      if (request.privateFill && kind!=='text') continue;
       let elements=[element];
       if (kind==='radio' && element.name) {
         elements=Array.from(doc.querySelectorAll('input[type=radio]')).filter(x=>x.name===element.name && x.form===element.form);
@@ -90,7 +95,7 @@ export function pageCommand(request) {
       const entry={kind,elements};
       const descriptor=describe(entry,`f${entries.length}`);
       if (!descriptor.label || descriptor.options?.length>254 || descriptor.options?.length===0 || new Set(descriptor.options?.map(x=>x.value)).size!== (descriptor.options?.length || 0)) continue;
-      entry.descriptor=descriptor;entry.before=value(entry);entry.fingerprint=JSON.stringify(descriptor);
+      entry.descriptor=descriptor;entry.before=request.privateFill ? snapshot(value(entry),token) : value(entry);entry.fingerprint=JSON.stringify(descriptor);
       entries.push(entry);
     }
     return entries;
@@ -100,13 +105,13 @@ export function pageCommand(request) {
     for (const element of entry.elements) for(let p=element.parentElement;p;p=p.parentElement) if(p.tagName==='DETAILS' && !p.open) {p.open=true;opened.push(p);}
     return opened;
   }
-  function current(entry) {
+  function current(entry, expectedFingerprint=entry.fingerprint) {
     const first=entry.elements[0];
     if (entry.kind==='radio' && first.name) {
       const members=Array.from(doc.querySelectorAll('input[type=radio]')).filter(x=>x.name===first.name && x.form===first.form);
       if (members.length!==entry.elements.length || members.some((x,i)=>x!==entry.elements[i])) return false;
     }
-    return entry.elements.every(allowed) && JSON.stringify(describe(entry,entry.descriptor.id))===entry.fingerprint;
+    return entry.elements.every(allowed) && JSON.stringify(describe(entry,entry.descriptor.id))===expectedFingerprint;
   }
   function setter(element,property,newValue) {
     const prototype=element.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:element.tagName==='SELECT'?HTMLSelectElement.prototype:HTMLInputElement.prototype;
@@ -133,25 +138,37 @@ export function pageCommand(request) {
         const probe=element.cloneNode(true);probe.value=newValue;
         if (newValue && (!probe.validity.valid || probe.value!==newValue)) return false;
       }
+      // A page can copy the value into labels synchronously from its input handler.
+      if (request.privateFill && !restoring) globalThis[key].privatePage=true;
       setter(element,'value',newValue);
     }
     return true;
   }
   const settle=()=>new Promise(resolve=>setTimeout(resolve,80));
   if (request.op==='scan') {
+    const previous=globalThis[key];
+    if (previous?.privatePage && !request.privateFill) return {privatePage:true};
+    if (previous?.busy) throw new Error('入力処理中です。');
     const opened=openedForScan();
     try {
-      const entries=collect();
-      if (entries.length>160) throw new Error('160項目を超えています。対象フォームを分けてください。');
-      const previous=globalThis[key];
       const token=crypto.randomUUID();
-      globalThis[key]={token,url:location.href,entries,undo:previous?.undo||[]};
-      return {token,url:location.origin+location.pathname,title:doc.title,fields:entries.map(x=>x.descriptor),unsupported:doc.querySelectorAll('[role=combobox]:not(select),[role=listbox]:not(select),iframe').length};
+      const entries=collect(token);
+      if (entries.length>160) throw new Error('160項目を超えています。対象フォームを分けてください。');
+      const fields=entries.map(entry=>entry.descriptor);
+      if (request.privateFill) {
+        // Headings returned to the local reviewer may contain an earlier private value.
+        for (const entry of entries) {
+          entry.fingerprint=snapshot(entry.fingerprint,token);
+          entry.descriptor={id:entry.descriptor.id};
+        }
+      }
+      globalThis[key]={token,privatePlan:Boolean(request.privateFill),privatePage:Boolean(previous?.privatePage),url:location.href,entries,undo:previous?.undo||[]};
+      return {token,url:location.origin+location.pathname,title:doc.title,fields,unsupported:doc.querySelectorAll('[role=combobox]:not(select),[role=listbox]:not(select),iframe').length};
     } finally {opened.reverse().forEach(x=>{x.open=false;});}
   }
   return (async()=>{
     const state=globalThis[key];
-    if (!state || state.url!==location.href || (request.op==='apply' && request.token!==state.token)) throw new Error('対象ページが変わりました。もう一度読み取ってください。');
+    if (!state || state.url!==location.href || (request.op==='apply' && (request.token!==state.token || Boolean(request.privateFill)!==state.privatePlan))) throw new Error('対象ページが変わりました。もう一度読み取ってください。');
     if (state.busy) throw new Error('入力処理中です。');
     state.busy=true;
     try {
@@ -187,12 +204,17 @@ export function pageCommand(request) {
         const row=rows.get(entry.descriptor.id);if(!row) continue;
         const opened=reveal(entry);
         try {
-          if (!current(entry) || value(entry)!==entry.before) {results.push({id:row.id,status:'skip',reason:'ページの項目または値が変わりました。'});continue;}
-          if (value(entry)===row.value) {results.push({id:row.id,status:'unchanged',reason:'すでに同じ値です。'});continue;}
           const before=value(entry);
+          const fingerprint=state.privatePlan ? JSON.stringify(describe(entry,row.id)) : entry.fingerprint;
+          const matches=state.privatePlan
+            ? await snapshot(before,state.token)===await entry.before &&
+              await snapshot(fingerprint,state.token)===await entry.fingerprint
+            : before===entry.before;
+          if (!matches || value(entry)!==before || state.url!==location.href || !current(entry,fingerprint)) {results.push({id:row.id,status:'skip',reason:'ページの項目または値が変わりました。'});continue;}
+          if (value(entry)===row.value) {results.push({id:row.id,status:'unchanged',reason:'すでに同じ値です。'});continue;}
           if (!write(entry,row.value)) {results.push({id:row.id,status:'skip',reason:'この値は項目に設定できません。'});continue;}
           const after=value(entry);
-          if (after!==before) undo.push({entry,before,after});
+          if (!request.privateFill && after!==before) undo.push({entry,before,after});
           await settle();await settle();
           const retained=value(entry)===row.value;
           results.push({id:row.id,status:retained?'filled':'failed',reason:retained?'入力して読戻しを確認しました。':'ページが値を受け付けませんでした。'});
@@ -210,7 +232,10 @@ export function pageCommand(request) {
         }
       }
       state.token=null;
-      if (undo.length) state.undo=undo;
+      if (request.privateFill) {
+        state.entries=[];
+        if (results.some(row=>row.status==='filled' || row.status==='failed')) state.undo=[];
+      } else if (undo.length) state.undo=undo;
       return results;
     } finally {state.busy=false;}
   })();

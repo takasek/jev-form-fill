@@ -145,3 +145,34 @@ test('undo restores an original incomplete email value instead of validating it 
   assert.equal(result[0]?.status,'restored');
   assert.equal(dom.window.document.querySelector('#e').value,'unfinished');
 });
+test('later AI analysis cannot collect a private value reflected in a heading', async()=>{
+  const {dom,command}=fixture('<form><h2>Contact</h2><label>Name<input></label></form>');
+  dom.window.TextEncoder=TextEncoder;
+  Object.defineProperty(dom.window.crypto,'subtle',{value:crypto.subtle});
+  const doc=dom.window.document;
+  doc.querySelector('input').oninput=event=>{doc.querySelector('h2').textContent=event.target.value;};
+  const scan=await command({op:'scan',privateFill:true});
+  await command({op:'apply',privateFill:true,token:scan.token,rows:[{id:'f0',value:'private fixture'}]});
+  assert.equal(command({op:'scan'}).privatePage,true);
+  const state=dom.window.__jevFormFillPrivateV1;
+  assert.equal(state.entries.length,0);
+  assert.equal(state.undo.length,0);
+  const next=await command({op:'scan',privateFill:true});
+  assert.equal(next.fields.length,1);
+  const [entry]=dom.window.__jevFormFillPrivateV1.entries;
+  assert.notEqual(await entry.before,'private fixture');
+  assert.doesNotMatch(JSON.stringify(entry.descriptor),/private fixture/);
+  assert.doesNotMatch(await entry.fingerprint,/private fixture/);
+  dom.window.close();
+});
+
+test('rejecting an invalid private value leaves the normal form available',async()=>{
+  const {dom,command}=fixture('<label>Email<input type=email></label>');
+  dom.window.TextEncoder=TextEncoder;
+  Object.defineProperty(dom.window.crypto,'subtle',{value:crypto.subtle});
+  const scan=await command({op:'scan',privateFill:true});
+  const result=await command({op:'apply',privateFill:true,token:scan.token,rows:[{id:'f0',value:'invalid'}]});
+  assert.equal(result[0].status,'skip');
+  assert.equal(command({op:'scan'}).fields.length,1);
+  dom.window.close();
+});
