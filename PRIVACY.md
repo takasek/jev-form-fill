@@ -17,3 +17,5 @@ There is no analytics or application backend. GitHub distributes the code and do
 The macOS helper stores the chosen vault and identity item identifiers and its configuration. Opening the review reads that one item with the CLI. Only supported identity fields, such as names, addresses and contact details, reach the review window. Notes and credentials are excluded. Matching and preview run locally. Only confirmed values are applied to the destination site. Values are excluded from AI requests, extension storage, diagnostics and Undo history. Legacy field registrations use saved field references and labels.
 
 After a 1Password fill, the extension blocks AI analysis of that document because the site could copy the value into field labels or headings.
+
+For read-only rechecks, the isolated page context keeps form element references and salted hashes until a new scan or page reload.

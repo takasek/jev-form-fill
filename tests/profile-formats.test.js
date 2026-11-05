@@ -152,3 +152,18 @@ test('separate HTML autocomplete sections do not truncate another person’s add
   assert.match(control.parentElement.textContent,/applicant/);control.click();
   await ui.apply();assert.deepEqual(ui.writes,[{id:'f0',value:'架空区若葉町2-3-4'}]);
 });
+
+test('a landline is not inferred from a mobile number, and explicit half-width kana preserves voicing',async()=>{
+  const ui=await review([{role:'tel',scope:'mobile',label:'携帯',value:'09012345678'},
+    {role:'name-kana',label:'フリガナ',value:'ユキノ ナギ'}],[
+    {label:'固定電話番号（任意）',type:'tel',autocomplete:'tel'},
+    {label:'フリガナ',hint:'半角カタカナで入力'}]);
+  await ui.apply();assert.deepEqual(ui.writes,[{id:'f1',value:'ﾕｷﾉ ﾅｷﾞ'}]);
+});
+
+test('uses only the address suffix when the same identity supplies the separate prefecture and city',async()=>{
+  const ui=await review([{role:'street-address',label:'住所',value:'〒123-4567 東京都架空市見本町4-8 青葉荘306'},
+    {role:'address-level1',label:'都道府県',value:'東京都'},{role:'address-level2',label:'市区町村',value:'架空市'}],[
+    {label:'都道府県'},{label:'市区町村'},{label:'住所',hint:'町名・番地・建物名のみ入力してください'}]);
+  await ui.apply();assert.equal(ui.writes.at(-1).value,'見本町4-8 青葉荘306');
+});

@@ -43,6 +43,8 @@ Open **Fill from 1Password** on a form. Review the proposed names, addresses and
 
 The preview adapts names to explicit spacing and order, phone numbers to known groups or exact digit widths, and Japanese addresses to supported parcel boundaries. Edit the proposed text directly when the boundary or format is unclear.
 
+If a recipient control changes during review, use **Review the current form** before filling. After a private write the extension waits about two seconds and reports direct writes, current matches and changes to other fields. Choose **Check current values** again after the website completes its own updates.
+
 Rerun the installer to switch identities. Existing `--field` configurations still support individual fills. Use `--chrome-data` for a custom Chrome data directory. To uninstall, remove `local.jev_form_fill.onepassword.json` and the `local.jev_form_fill.onepassword` folder from its `NativeMessagingHosts` folder.
 
 ## Install
@@ -82,7 +84,7 @@ When new fields appear after a selection, create proposals again. Fields edited 
 
 Native `details` are opened for scanning and then restored. Open other collapsed sections yourself. Radio groups are handled only when the entire same-name group in the same form can be operated on. Credential/payment-looking text fields are excluded heuristically; secrets in the source text are not automatically removed.
 
-Readback checks run after writes and again 650ms after the entire fill. There is no ongoing monitor after that. Jev judgments can vary between runs, so always review the proposals and the final values. Model thresholds are application policy, not measured accuracy.
+For TypeSafe, readback checks run after writes and again 650ms after the entire fill. There is no ongoing monitor after that. Jev judgments can vary between runs, so always review the proposals and the final values. Model thresholds are application policy, not measured accuracy.
 
 ## Privacy, permissions, and cost
 

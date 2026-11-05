@@ -100,6 +100,15 @@ export function formatContactValue(value, role, field) {
   }
   if (role?.endsWith('-kana')) {
     const compact = value.replace(/[ｦ-ﾟ]+/gu, part=>part.normalize('NFKC'));
+    if (/半角(?:の)?(?:カタカナ|カナ)/.test(hint)) {
+      const katakana=compact.replace(/[ぁ-ゖ]/gu,c=>String.fromCharCode(c.charCodeAt(0)+96));
+      const narrow=new Map();
+      for (let code=0xff61;code<=0xff9f;code++) {
+        const half=String.fromCharCode(code);
+        narrow.set(half.normalize('NFKC'),half);
+      }
+      return [...katakana.normalize('NFD')].map(c=>narrow.get(c) || c).join('').replace(/　/g,' ');
+    }
     if (/ひらがな|ふりがな|せい|めい/.test(hint)) return compact.replace(/[ァ-ヶ]/gu, c=>String.fromCharCode(c.charCodeAt(0)-96));
     if (/カタカナ|フリガナ|セイ|メイ/.test(hint)) return compact.replace(/[ぁ-ゖ]/gu, c=>String.fromCharCode(c.charCodeAt(0)+96));
   }

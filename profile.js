@@ -74,7 +74,17 @@ export function profileSources(fields, targets) {
     targetRoles.lastIndexOf(phoneParts[i]) === start+i && sectionOf(field) === sectionOf(group[0]) &&
     field.maxLength > 0 && field.maxLength <= 5) ? group.map(f=>f.maxLength) : null;
   for (const source of fields) {
-    for (const [role,value] of Object.entries(derivedParts(source,widths) || {})) {
+    const parts = derivedParts(source,widths) || {};
+    if (source.role==='street-address' && needed.has('town-address')) {
+      let suffix=source.value.trim().replace(/^〒\s*[0-9０-９]{3}[-－][0-9０-９]{4}\s*/, '');
+      for (const role of ['address-level1','address-level2']) {
+        const matches=fields.filter(f=>f.role===role && (!f.scope || f.scope===source.scope) && suffix.startsWith(f.value));
+        if (matches.length!==1) { suffix=''; break; }
+        suffix=suffix.slice(matches[0].value.length).trimStart();
+      }
+      if (suffix) parts['town-address']=suffix;
+    }
+    for (const [role,value] of Object.entries(parts)) {
       if (!value || !needed.has(role) || fields.some(f=>f.role===role && f.scope===source.scope)) continue;
       sources.push({role,scope:source.scope,label:source.label,value});
     }
@@ -102,6 +112,9 @@ function proposedSource(field, sources) {
   const role = targetRole(field);
   if (!role) return -1;
   let candidates = sources.filter(source => source.role === role);
+  if (role==='tel' && /固定(?:電話|回線)|landline/i.test([field.label,field.hint].join(' '))) {
+    candidates=candidates.filter(source=>source.scope!=='mobile' && /固定(?:電話|回線)|landline/i.test(source.label));
+  }
   const scope = targetScope(field);
   if (scope) {
     const scoped = candidates.filter(s => s.scope === scope);
@@ -132,6 +145,9 @@ export function reviewProfile(doc, scan, targets, fields, api, t, localize) {
   targets = targets.map((field,index) => {
     if (rawRoles[index] !== 'street-address') return field;
     const neighbors = rawRoles.filter((_,i)=>sectionOf(targets[i]) === sectionOf(field));
+    if (neighbors.includes('address-level1') && neighbors.includes('address-level2') &&
+        /町名|番地|市区町村以降/.test([field.hint,field.label,field.placeholder].join(' ')) &&
+        !neighbors.includes('parcel') && !neighbors.includes('address-line2')) return {...field,formatRole:'town-address'};
     const separateLot = neighbors.includes('parcel') || neighbors.includes('parcel-rest');
     if (!separateLot && !neighbors.includes('address-line2')) return field;
     const hasLocality = neighbors.includes('address-level1') || neighbors.includes('address-level2');
@@ -171,7 +187,7 @@ export function reviewProfile(doc, scan, targets, fields, api, t, localize) {
     const heading = field.sectionLabel ?? field.context ?? '';
     const context = field.context || '';
     const rowText = context.startsWith(heading) ? context.slice(heading.length) : context;
-    if (index < 0 || thirdParty.test([field.label,rowText].join(' '))) return -1;
+    if (index < 0 || field.uncertainGroup || thirdParty.test([field.label,rowText].join(' '))) return -1;
     const same = sections.get(sectionOf(field)).filter(other=>proposals[targets.indexOf(other)] === index);
     if (same.length === 1) return index;
     const confirmation = f => /確認|再入力|もう一度|confirm|re.?enter/i.test(f.label);
@@ -305,7 +321,7 @@ export function reviewProfile(doc, scan, targets, fields, api, t, localize) {
     if (fill.disabled) return;
     fill.disabled = true;
     const selected = rows.filter(row => enabled(row) && reviewedValue(row) !== '');
-    const writes = selected.map(row => ({id:row.field.id,value:formValue(row.field,reviewedValue(row)),
+    let writes = selected.map(row => ({id:row.field.id,value:formValue(row.field,reviewedValue(row)),
       ...(row.replace?.checked ? {overwrite:true} : {})}));
     for (const control of sectionControls.values()) { control.disabled=true; control.onchange=null; }
     for (const {select,preview,edit,replace} of rows) {
@@ -317,13 +333,39 @@ export function reviewProfile(doc, scan, targets, fields, api, t, localize) {
     }
     sources.length = 0;
     fill.onclick = null;
-    try {
-      const results = await api.apply({op:'apply', privateFill:true, token:scan.token, rows:writes});
-      for (const {field,preview} of selected) {
-        const result = results.find(result => result.id === field.id);
-        preview.textContent = result ? localize(result.reason) : t('opPageError');
+    const total=writes.length;
+    const verify=doc.getElementById('profileVerify');
+    const rescan=doc.getElementById('profileRescan');
+    function show(results) {
+      for (const {field,preview} of rows) {
+        const result=results.find(r=>r.id===field.id);
+        preview.textContent=result ? localize(result.reason) : '';
       }
-      status.textContent = t('opBatchResult',{filled:results.filter(r=>r.status==='filled').length,total:writes.length});
-    } catch { status.textContent = t('opPageError'); }
+      const matched=results.filter(r=>['filled','matched','unchanged'].includes(r.status)).length;
+      const written=results.filter(r=>r.wrote || r.status==='filled').length;
+      const notes=[t('opReadbackSummary',{written,matched,total})];
+      if (results.some(r=>r.status==='stale')) notes.push(t('opTargetStale'));
+      const indirect=results.filter(r=>r.status==='indirect').map(r=>rows.find(row=>row.field.id===r.id)?.field.label);
+      if (indirect.length) notes.push(t('opIndirect',{labels:indirect.join(' / ')}));
+      if (results.some(r=>r.status==='new-fields')) notes.push(t('opNewFields'));
+      status.textContent=notes.join(' ');
+    }
+    status.textContent=t('opWaitingReadback');
+    try {
+      show(await api.apply({op:'apply', privateFill:true, token:scan.token, rows:writes}));
+      if (api.verify) {
+        verify.hidden=false;
+        verify.onclick=async()=>{
+          verify.disabled=true;
+          try { show(await api.verify(scan.token)); }
+          catch { status.textContent=t('opPageError'); }
+          finally { verify.disabled=false; }
+        };
+      }
+    } catch { status.textContent=t('opPageError'); }
+    finally {
+      writes=null;
+      if (api.rescan) { rescan.hidden=false; rescan.onclick=api.rescan; }
+    }
   };
 }

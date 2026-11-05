@@ -176,3 +176,53 @@ test('rejecting an invalid private value leaves the normal form available',async
   assert.equal(command({op:'scan'}).fields.length,1);
   dom.window.close();
 });
+
+function privateFixture(html) {
+  const f=fixture(html);
+  f.dom.window.TextEncoder=TextEncoder;
+  Object.defineProperty(f.dom.window.crypto,'subtle',{value:crypto.subtle});
+  return f;
+}
+test('a recipient switch invalidates a reviewed private fill even if the same empty input is reused',async()=>{
+  const {dom,command}=privateFixture('<form><input type=radio name=p checked><input type=radio name=p><label>メール<input type=email></label></form>');
+  const scan=command({op:'scan',privateFill:true});
+  dom.window.document.querySelectorAll('[type=radio]')[1].click();
+  const results=await command({op:'apply',privateFill:true,token:scan.token,rows:[{id:'f0',value:'owner@example.test'}]});
+  assert.equal(dom.window.document.querySelector('[type=email]').value,'');
+  assert.equal(results[0].status,'stale');
+  dom.window.close();
+});
+test('private sections preserve visible informal and ARIA-referenced recipient names',()=>{
+  for(const sections of [
+    '<div><strong>購入者</strong><label>メール<input></label></div><div><strong>受取人</strong><label>姓<input></label></div>',
+    '<div><p>購入者</p><label>メール<input></label></div><div><p>受取人</p><label>姓<input></label></div>',
+    '<section aria-labelledby=a><p id=a>購入者</p><label>メール<input></label></section><section aria-labelledby=b><p id=b>受取人</p><label>姓<input></label></section>'
+  ]) {
+    const {dom,command}=privateFixture('<form><h1>チケット</h1>'+sections+'</form>');
+    const [a,b]=command({op:'scan',privateFill:true}).fields;
+    assert.notEqual(a.group,b.group);assert.match(a.sectionLabel,/購入者/);assert.match(b.sectionLabel,/受取人/);
+    dom.window.close();
+  }
+});
+test('private fill reports indirect changes and can check again after a late site update',async()=>{
+  const {dom,command}=privateFixture('<form><label>郵便番号<input></label><label>市区町村<input value=手入力市></label></form>');
+  const [zip,city]=dom.window.document.querySelectorAll('input');
+  zip.oninput=()=>{city.value='補完市'};
+  const scan=command({op:'scan',privateFill:true});
+  const results=await command({op:'apply',privateFill:true,token:scan.token,rows:[{id:'f0',value:'1000001'}]});
+  assert.ok(results.some(r=>r.id==='f1' && r.status==='indirect'));
+  zip.value='1111111';
+  const later=await command({op:'verify',privateFill:true,token:scan.token});
+  assert.ok(later.some(r=>r.id==='f0' && r.status==='changed'));
+  dom.window.close();
+});
+
+test('ARIA recipient tabs implemented as input buttons invalidate the private plan',async()=>{
+  const {dom,command}=privateFixture('<form><input type=button role=tab aria-selected=true><input type=button role=tab aria-selected=false><label>メール<input type=email></label></form>');
+  const scan=command({op:'scan',privateFill:true});
+  const [a,b]=dom.window.document.querySelectorAll('[role=tab]');
+  a.setAttribute('aria-selected','false');b.setAttribute('aria-selected','true');
+  const r=await command({op:'apply',privateFill:true,token:scan.token,rows:[{id:'f0',value:'test@example.test'}]});
+  assert.equal(r[0].status,'stale');assert.equal(dom.window.document.querySelector('[type=email]').value,'');
+  dom.window.close();
+});

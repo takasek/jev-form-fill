@@ -99,6 +99,8 @@ if (typeof chrome !== 'undefined' && chrome.scripting) {
   startReview(document, {
     scan:() => command({op:'scan', privateFill:true}),
     apply:command,
+    verify:token=>command({op:'verify',privateFill:true,token}),
+    rescan:()=>location.reload(),
     native:request => chrome.runtime.sendNativeMessage('local.jev_form_fill.onepassword', request)
   }, params.get('lang'));
 }
