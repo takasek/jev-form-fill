@@ -1,5 +1,6 @@
 """Install a macOS Chrome native host and its user-selected field references."""
 import argparse
+import base64
 import hashlib
 import json
 import os
@@ -12,6 +13,15 @@ from tempfile import NamedTemporaryFile
 from host import run_op
 
 HOST = 'local.jev_form_fill.onepassword'
+
+
+def distribution_id():
+    manifest = json.loads(Path(__file__).resolve().parents[1].joinpath('manifest.json').read_text(encoding='utf-8'))
+    key = base64.b64decode(manifest['key'], validate=True)
+    if not key:
+        raise ValueError('The distribution has no extension key.')
+    digest = hashlib.sha256(key).hexdigest()[:32]
+    return ''.join(chr(ord('a') + int(character, 16)) for character in digest)
 
 
 def select_python(explicit=None):
@@ -70,7 +80,7 @@ def replace(path, text, mode=0o600):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('extension_id')
+    parser.add_argument('extension_id', nargs='?', help='Defaults to this distribution’s fixed extension ID.')
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument('--profile', nargs=2, action='append', metavar=('VAULT', 'IDENTITY_ITEM_ID'))
     source.add_argument('--choose', nargs='?', const='', metavar='VAULT', help='Choose one or more Identity items from a local list.')
@@ -79,6 +89,11 @@ def main():
     parser.add_argument('--python', help='Stable absolute Python 3.9+ executable (not a virtualenv).')
     parser.add_argument('--chrome-data', type=Path, default=Path.home() / 'Library/Application Support/Google/Chrome')
     args = parser.parse_args()
+    if args.extension_id is None:
+        try:
+            args.extension_id = distribution_id()
+        except (OSError, ValueError, KeyError):
+            parser.error('Could not determine the extension ID. Use a complete distribution or specify the ID shown in chrome://extensions.')
     op = shutil.which('op')
     if sys.platform != 'darwin' or not op or not re.fullmatch('[a-p]{32}', args.extension_id):
         parser.error('Requires macOS, 1Password CLI, and the extension ID from chrome://extensions.')

@@ -7,6 +7,26 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'native'))
 from host import handle
 
 class HostTests(unittest.TestCase):
+    def test_repair_uses_the_distribution_id_without_manual_copying(self):
+        import install, tempfile, json
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as folder:
+            native=Path(folder)/'NativeMessagingHosts'/install.HOST
+            native.mkdir(parents=True)
+            registered={'profile':{'vault':'Demo','item':'a'*26}}
+            (native/'fields.json').write_text(json.dumps({'origin':'chrome-extension://'+'b'*32+'/',**registered}))
+            args=['install.py','--repair','--chrome-data',folder]
+            with patch.object(sys,'argv',args),patch.object(sys,'platform','darwin'), \
+                 patch.object(install.shutil,'which',return_value='/fixture/op'), \
+                 patch.object(install,'select_python',return_value='/usr/bin/python3'),patch('builtins.print'):
+                install.main()
+            config=json.loads((native/'fields.json').read_text())
+            origin='chrome-extension://aphbpgobgclgapicghknakcleaalecnj/'
+            self.assertEqual(config['origin'],origin)
+            self.assertEqual(config['profile'],registered['profile'])
+            manifest=json.loads((native.parent/(install.HOST+'.json')).read_text())
+            self.assertEqual(manifest['allowed_origins'],[origin])
+
     def test_multiple_identities_list_metadata_and_read_only_the_chosen_registration(self):
         config={'profiles':{'a':{'label':'Personal','vault':'v1','item':'i1'},
                             'b':{'label':'Work','vault':'v2','item':'i2'}}}

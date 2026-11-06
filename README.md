@@ -49,10 +49,10 @@ For Japanese registration forms, add the text fields you need to the same identi
 
 Supported alternatives include `氏名（姓 名）` for an explicitly ordered full name, `フリガナ` for its reading, and `住所1` / `住所2` for separate address lines. Without a separate postcode field, only an explicitly marked postcode such as `〒150-0002` in the address becomes a candidate.
 
-Install the 1Password app and CLI (`op`) and enable CLI integration under Settings → Developer. Find the extension ID on `chrome://extensions`. Run this from the extension folder with Python 3.9 or later, then choose identities from the numbered list. Enter `1,2` to register more than one. You do not need to copy item IDs.
+Install the 1Password app and CLI (`op`) and enable CLI integration under Settings → Developer. Run this from the extension folder with Python 3.9 or later, then choose identities from the numbered list. Enter `1,2` to register more than one. The extension ID comes from the distribution's public key; item IDs do not need to be copied either.
 
 ```sh
-python3 native/install.py EXTENSION_ID --choose
+python3 native/install.py --choose
 ```
 
 Use `--choose 'Vault name'` to restrict the list. The existing `--profile 'Vault name' IDENTITY_ITEM_ID` option is also supported and can be repeated. Registration checks item metadata without reading contact values. [CLI item list reference](https://www.1password.dev/cli/reference/management-commands/item#item-list)
@@ -71,7 +71,7 @@ To combine TypeSafe and 1Password, apply AI proposals first, then use 1Password.
 
 To add or remove registrations, rerun setup and select every identity you want to keep. Existing `--field` configurations still support individual fills. Use `--chrome-data` for a custom Chrome data directory.
 
-The helper uses a tested Python 3.9+ at `/usr/bin/python3`, `/opt/homebrew/bin/python3` or `/usr/local/bin/python3`, rather than the virtual environment used for setup. An alternative stable executable can be specified with `--python /absolute/path/python3`. After moving or removing Python, or changing the extension connection, run `python3 native/install.py EXTENSION_ID --repair` with the current extension ID to update the helper while preserving registered identities.
+The helper uses a tested Python 3.9+ at `/usr/bin/python3`, `/opt/homebrew/bin/python3` or `/usr/local/bin/python3`, rather than the virtual environment used for setup. An alternative stable executable can be specified with `--python /absolute/path/python3`. After moving/removing Python, or to update the helper, run `python3 native/install.py --repair` while preserving registered identities. For a development build with a different ID, the explicit form `python3 native/install.py EXTENSION_ID --repair` remains supported.
 
 Authorization frequency depends on the 1Password session, lock state and account. Starting a new CLI process does not by itself establish that every read requires Touch ID. Rechecking destinations within the review uses the loaded identity without another CLI read. The extension does not bypass authentication or save session credentials. [1Password authorization model](https://www.1password.dev/cli/app-integration-security)
 
@@ -79,7 +79,11 @@ To uninstall, remove `local.jev_form_fill.onepassword.json` and the `local.jev_f
 
 ## Install
 
-On Mac, run `python3 native/stage.py` from the extracted distribution first. It copies the runtime to `~/Library/Application Support/Jev Form Fill/extension`; load that fixed folder in Chrome. Moving or deleting the download folder then has no effect. For updates, run the same command from the new download and reload the extension. Keep the installed folder in place: moving Chrome's load path changes its extension ID. If you intentionally move it, run the helper's `--repair` with the new ID to keep the registered identities. Use `--repair` for helper updates too.
+On Mac, run `python3 native/stage.py` from the extracted distribution first. It copies the runtime to `~/Library/Application Support/Jev Form Fill/extension`; load that folder in Chrome. Moving or deleting the download folder then has no effect. For updates, run the same command from the new download and reload the extension. Use `python3 native/install.py --repair` for helper updates.
+
+This distribution's public key in `manifest.json` fixes its extension ID to `aphbpgobgclgapicghknakcleaalecnj`, even when loaded from a different folder. Do not regenerate that public key during updates. [Chrome manifest key](https://developer.chrome.com/docs/extensions/reference/manifest/key)
+
+When migrating from a version without the fixed ID, turn the old extension off, load the new folder with **Load unpacked**, then run `python3 native/install.py --repair` from the new folder. Registered 1Password items are preserved and only the new ID is authorized. Language, saved API key and toolbar pinning must be configured again for the new extension. Neither API keys nor 1Password values are copied automatically.
 
 No build step or Node.js is required to use the extension.
 

@@ -21,5 +21,6 @@
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'none'; connect-src https://api.typesafe.ai"
   },
-  "default_locale": "en"
+  "default_locale": "en",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyaionV6gPjEPU7LifF6ML+slNiu5HClzif9bu6+XtJsQtWipPlZp1P1yGUqg5vxWYagwDTJfjY3iFGA0RDIKRFv7n8fDulup2vNWKT97V3pA5bDScEUQXkJaw9p4QAaS7M3f07AwipI/NFTasZ2pE+mNLpGcfl8H3HCuSp/cUwdddomzj5UKIcvcOJR+h76ZIBX06jO0mEYZwcWmkY5lq0RMWon32uR61vfGryV8MrXBFpYBs8vkjPqQcVvSYMld6CL2OJdNFxOlpNwqoyXFdIghwNZA1SWrGj/AUWAZStkWuphgTgzT8Yb7XLrxBTSVoXJV3YaiMnFz2SXnNUZuLwIDAQAB"
 }

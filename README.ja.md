@@ -34,10 +34,10 @@
 
 姓名をまとめて持つ場合は `氏名（姓 名）`、まとめた読みは `フリガナ`、住所1・住所2として分ける場合は `住所1`・`住所2` も使えます。独立した郵便番号がない場合は、住所中の `〒150-0002` のように明示された郵便番号だけを候補にします。
 
-Mac の 1Password アプリと CLI（`op`）を用意し、「設定 → 開発者」で CLI との統合を有効にします。拡張 ID は `chrome://extensions` で確認します。拡張フォルダで Python 3.9 以降を使って次を実行し、一覧から使う身元情報の番号を選びます。複数なら `1,2` のように指定できます。アイテム ID のコピーは不要です。
+Mac の 1Password アプリと CLI（`op`）を用意し、「設定 → 開発者」で CLI との統合を有効にします。拡張フォルダで Python 3.9 以降を使って次を実行し、一覧から使う身元情報の番号を選びます。複数なら `1,2` のように指定できます。拡張 ID は配布物の公開鍵から決まり、アイテム ID もコピー不要です。
 
 ```sh
-python3 native/install.py EXTENSION_ID --choose
+python3 native/install.py --choose
 ```
 
 `--choose '保管庫名'` ならその保管庫の一覧に絞れます。ID を指定する従来の `--profile '保管庫名' IDENTITY_ITEM_ID` も使え、複数回指定できます。登録時は一覧の情報だけで存在を確認し、連絡先の値は取得しません。[CLI の項目一覧](https://www.1password.dev/cli/reference/management-commands/item#item-list)
@@ -56,7 +56,7 @@ TypeSafe の AI 入力も使う場合は、AI の候補を先に確認・入力�
 
 登録する身元情報の追加・削除には設定コマンドを再実行し、残したいものをすべて選びます。従来の `--field` 設定は個別入力として利用できます。別の Chrome データディレクトリには `--chrome-data` を指定してください。
 
-ヘルパーにはセットアップ用の仮想環境を使わず、Python 3.9 以降の `/usr/bin/python3`、`/opt/homebrew/bin/python3`、`/usr/local/bin/python3` の順で動作確認したパスを使います。安定した別のパスは `--python /絶対パス/python3` で指定できます。Python の削除・移行や拡張の接続先変更後は、現在の拡張 ID で `python3 native/install.py EXTENSION_ID --repair` を実行すると、身元情報を選び直さずヘルパーを更新できます。
+ヘルパーにはセットアップ用の仮想環境を使わず、Python 3.9 以降の `/usr/bin/python3`、`/opt/homebrew/bin/python3`、`/usr/local/bin/python3` の順で動作確認したパスを使います。安定した別のパスは `--python /絶対パス/python3` で指定できます。Python の削除・移行後やヘルパーの更新時は `python3 native/install.py --repair` を実行すると、身元情報を選び直さず更新できます。別IDを持つ開発版には従来どおり `python3 native/install.py EXTENSION_ID --repair` と明示できます。
 
 認証の頻度は 1Password のセッション、ロック、アカウントに依存します。CLI が新しいプロセスだから毎回 Touch ID が必要、とは断定できません。確認中の入力先の再確認は取得済みの値を使い、追加の CLI 読取を行いません。認証の省略や資格情報の保存で回避することはありません。[1Password の認証モデル](https://www.1password.dev/cli/app-integration-security)
 
@@ -72,7 +72,9 @@ Chrome 116以上が対象です。ビルドやNode.jsのインストールは不
 3. 「パッケージ化されていない拡張機能を読み込む」を押し、`manifest.json` があるフォルダを選びます。Mac で上の配置コマンドを使った場合は、表示された固定フォルダを選びます。
 4. ツールバーの拡張機能メニューから「Jev Form Fill」を開きます。必要なら固定します。
 
-更新時は新しい展開元から `python3 native/stage.py` を再実行し、`chrome://extensions` で拡張を再読み込みしてください。配置先の固定フォルダ自体は移動しないでください。別の読み込み元へ移行すると Chrome の拡張 ID が変わるため、現在の ID を使って前述の `--repair` を実行します。1Password ヘルパーを更新する場合も `--repair` を使えます。
+更新時は新しい展開元から `python3 native/stage.py` を再実行し、`chrome://extensions` で拡張を再読み込みしてください。この配布版は `manifest.json` の公開鍵により ID が `aphbpgobgclgapicghknakcleaalecnj` に固定されています。フォルダを別の場所に移して読み込み直しても ID は変わりません。IDを維持するため、この公開鍵は更新時に生成し直さないでください。[Chrome の manifest key](https://developer.chrome.com/docs/extensions/reference/manifest/key)
+
+固定ID導入前の版からは一度だけ再登録が必要です。旧版をオフにしてから、新しいフォルダを「パッケージ化されていない拡張機能を読み込む」で登録し、新しいフォルダから `python3 native/install.py --repair` を実行します。1Password の登録は保持され、新IDだけに接続を許可します。言語・保存したAPIキー・ツールバー固定は別の拡張として再設定が必要です。APIキーや1Passwordの値を自動コピーすることはありません。
 
 ## 使い方
 
