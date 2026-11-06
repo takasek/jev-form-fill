@@ -101,13 +101,14 @@ $('apply').addEventListener('click',()=>run(async()=>{
 }));
 $('undo').addEventListener('click',()=>run(async()=>{
   const result=await command({op:'undo'});
+  if (!result.length) {invalidate();status(t('emptyUndo'));return;}
   invalidate();status(`${result.filter(x=>x.status==='restored').length}件を元に戻しました。${result.filter(x=>x.status==='skip').length}件は後から編集されたため残しました。${result.filter(x=>x.status==='failed').length}件は戻せませんでした。`);
 }));
 async function initialize() {
   localizeUI();
   try {
     await chrome.storage.local.setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'});
-    const stored=await chrome.storage.local.get(['apiKey','uiLanguage']);$('api-key').value=stored.apiKey||'';$('remember').checked=Boolean(stored.apiKey);$('settings').open=!stored.apiKey;
+    const stored=await chrome.storage.local.get(['apiKey','uiLanguage']);$('api-key').value=stored.apiKey||'';$('remember').checked=Boolean(stored.apiKey);
     const preference=['en','ja'].includes(stored.uiLanguage)?stored.uiLanguage:'auto';
     $('language').value=preference;language=resolveLanguage(preference,browserLanguage);t=translator(language);localizeUI();
     const [tab]=await chrome.tabs.query({active:true,currentWindow:true});

@@ -68,3 +68,17 @@ test('an identity email is not automatically duplicated into a different person�
   document.querySelector('#profileSections input').click();
   assert.deepEqual([...document.querySelectorAll('#profileRows select')].map(s=>s.value),['0','']);
 });
+
+test('setup and identity failures offer actionable help and a local retry',async()=>{
+  const html=await readFile(new URL('../onepassword.html',import.meta.url),'utf8');
+  for (const failure of ['missing','authorization','cli-error']) {
+    const {window:{document}}=new JSDOM(html);
+    let retried=0;
+    await startReview(document,{scan:async()=>({fields:[{kind:'text'}]}),rescan:()=>retried++,
+      native:async r=>{if(failure==='missing') throw Error();return r.op==='list'?{profile:true}:{error:failure};}},'ja');
+    assert.equal(document.querySelector('#profileRescan').hidden,false);
+    document.querySelector('#profileRescan').click();assert.equal(retried,1);
+    assert.match(document.querySelector('#status').textContent,failure==='authorization'?/認証/:failure==='cli-error'?/保管庫/:/設定/);
+    assert.equal(document.querySelector('#setupHelp').hidden,false);
+  }
+});

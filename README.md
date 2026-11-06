@@ -7,7 +7,7 @@
 
 A Chrome extension that matches your clipboard text to form fields with **TypeSafe Jev**. Review the proposed values, choose which fields to change, and fill them in page order. Fields without a supported value stay unchanged. Explicit blanks, checkboxes, radio buttons, and selects are supported. Undo restores the last fill. You submit the form yourself.
 
-**Preview v0.1.5 · Chrome 116+ · Bring your TypeSafe API key.** Creating proposals sends your source text and field metadata to TypeSafe; API charges may apply. Read the [privacy notes](PRIVACY.md).
+**Preview v0.1.5 · Chrome 116+ · Use a TypeSafe API key for clipboard proposals. Local 1Password fills work without a key.** Creating proposals sends your source text and field metadata to TypeSafe; API charges may apply. Read the [privacy notes](PRIVACY.md).
 
 ## See it in action
 
@@ -43,7 +43,7 @@ Open **Fill from 1Password** on a form. Review the proposed names, addresses and
 
 The preview adapts names to explicit spacing and order, phone numbers to known groups or exact digit widths, and Japanese addresses to supported parcel boundaries. Edit the proposed text directly when the boundary or format is unclear.
 
-If a recipient control changes during review, use **Review the current form** before filling. After a private write the extension waits about two seconds and reports direct writes, current matches and changes to other fields. Choose **Check current values** again after the website completes its own updates.
+Clicking or using the keyboard on the original page can change who a field belongs to. If this happens during review, choose **Review the current form** and check the destination again. After a private write the extension waits about two seconds and reports direct writes, current matches and changes to other fields. Choose **Check current values** again after the website completes its own updates.
 
 Rerun the installer to switch identities. Existing `--field` configurations still support individual fills. Use `--chrome-data` for a custom Chrome data directory. To uninstall, remove `local.jev_form_fill.onepassword.json` and the `local.jev_form_fill.onepassword` folder from its `NativeMessagingHosts` folder.
 

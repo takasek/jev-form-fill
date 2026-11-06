@@ -226,3 +226,27 @@ test('ARIA recipient tabs implemented as input buttons invalidate the private pl
   assert.equal(r[0].status,'stale');assert.equal(dom.window.document.querySelector('[type=email]').value,'');
   dom.window.close();
 });
+
+test('activating a plain editor button invalidates a private review of the reused field',async()=>{
+  const {dom,command}=privateFixture('<form><button type=button>家族を編集</button><label>メール<input type=email></label></form>');
+  const scan=command({op:'scan',privateFill:true});
+  dom.window.document.querySelector('button').click();
+  const r=await command({op:'apply',privateFill:true,token:scan.token,rows:[{id:'f0',value:'owner@example.test'}]});
+  assert.equal(r[0].status,'stale');assert.equal(dom.window.document.querySelector('input').value,'');
+  dom.window.close();
+});
+
+test('a confirmation must match an existing counterpart on the page before writing',async()=>{
+  const {dom,command}=privateFixture('<form><label>Email<input value="original@example.test"></label><label>Confirm email<input></label></form>');
+  const scan=command({op:'scan',privateFill:true});
+  const result=await command({op:'apply',privateFill:true,token:scan.token,rows:[{id:'f1',value:'other@example.test',matchExisting:'f0'}]});
+  assert.equal(result[0].status,'confirmation');assert.equal(dom.window.document.querySelectorAll('input')[1].value,'');
+});
+
+test('an unmarked clickable row can also switch drafts while reviewing',async()=>{
+  const {dom,command}=privateFixture('<table><tr tabindex=0><td>家族</td></tr></table><label>メール<input></label>');
+  const scan=command({op:'scan',privateFill:true});
+  dom.window.document.querySelector('td').click();
+  const r=await command({op:'apply',privateFill:true,token:scan.token,rows:[{id:'f0',value:'owner@example.test'}]});
+  assert.equal(r[0].status,'stale');assert.equal(dom.window.document.querySelector('input').value,'');
+});

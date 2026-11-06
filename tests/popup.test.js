@@ -101,3 +101,10 @@ test('a failed API request leaves the form untouched and no apply plan; keys are
   ui.$('forget-key').click();await waitFor(()=>!ui.$('forget-key').disabled);
   assert.deepEqual(ui.saved(),{});
 });
+
+test('an empty undo history explains how to correct a private fill',async()=>{
+  const ui=popup({uiLanguage:'ja',pageFn:()=>[]});
+  await waitFor(()=>ui.$('target').textContent.includes('example.com'));
+  ui.$('undo').click();await waitFor(()=>!ui.$('undo').disabled);
+  assert.match(ui.$('status').textContent,/1Password/);
+});

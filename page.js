@@ -109,7 +109,7 @@ export function pageCommand(request) {
     });
   }
   function sameTarget(guards) {
-    if (!guards) return false;
+    if (!guards || globalThis[key].editorActivated) return false;
     const controls=switches();
     return controls.length===guards.length && guards.every(({node,selection},i)=>{
       if (node!==controls[i]) return false;
@@ -249,7 +249,18 @@ export function pageCommand(request) {
           entry.descriptor={id:entry.descriptor.id};
         }
       }
-      globalThis[key]={token,guards:request.privateFill ? switches().map(node=>({node,selection:choiceState(node)})) : null,privatePlan:Boolean(request.privateFill),privatePage:Boolean(previous?.privatePage),url:location.href,entries,undo:previous?.undo||[]};
+      previous?.listener?.abort();
+      const state={token,guards:request.privateFill ? switches().map(node=>({node,selection:choiceState(node)})) : null,privatePlan:Boolean(request.privateFill),privatePage:Boolean(previous?.privatePage),url:location.href,entries,undo:previous?.undo||[]};
+      globalThis[key]=state;
+      if (request.privateFill) {
+        // Sites can switch drafts from arbitrary elements without replacing the input.
+        // Review controls live in a different document. Our own writes dispatch input/change.
+        state.listener=new AbortController();
+        const invalidate=()=>{state.editorActivated=true;};
+        for (const event of ['click','keydown','pointerdown']) {
+          doc.addEventListener(event,invalidate,{capture:true,signal:state.listener.signal});
+        }
+      }
       return {token,url:location.origin+location.pathname,title:doc.title,fields,unsupported:doc.querySelectorAll('[role=combobox]:not(select),[role=listbox]:not(select),iframe').length};
     } finally {opened.reverse().forEach(x=>{x.open=false;});}
   }
@@ -286,13 +297,14 @@ export function pageCommand(request) {
       }
       async function readReceipt(receipt) {
         if (state.url!==location.href || !sameTarget(state.guards)) {
-          return receipt.items.filter(item=>item.result).map(item=>({id:item.id,wrote:!!item.result.wrote,status:'stale',reason:'入力対象の選択が変わりました。フォームを読み直してください。'}));
+          return receipt.items.filter(item=>item.result).map(item=>({id:item.id,wrote:!!item.result.wrote,status:'stale',reason:'元のフォームで操作または選択の変更がありました。フォームを読み直してください。'}));
         }
         const reports=await Promise.all(receipt.items.map(async item=>{
           const actual=item.node.isConnected ? await snapshot(item.node.value,receipt.token) : null;
           if (!item.result) return actual===await item.before ? null :
             {id:item.id,status:'indirect',reason:'この欄への直接入力は行っていませんが、値または欄が変わりました。'};
           const result=item.result;
+          if (result.status==='confirmation') return result;
           if (actual===await item.expected && result.status!=='stale' &&
               await snapshot(JSON.stringify(describe(item.entry,item.id)),receipt.token)===await item.entry.fingerprint) {
             return {...result,status:result.wrote?'filled':'matched',reason:result.wrote?'入力して読戻しを確認しました。':'現在の値が候補と一致しています。'};
@@ -328,7 +340,14 @@ export function pageCommand(request) {
               await snapshot(fingerprint,state.token)===await entry.fingerprint
             : before===entry.before;
           if (state.privatePlan && !sameTarget(state.guards)) {
-            results.push({id:row.id,status:'stale',reason:'入力対象の選択が変わりました。フォームを読み直してください。'});continue;
+            results.push({id:row.id,status:'stale',reason:'元のフォームで操作または選択の変更がありました。フォームを読み直してください。'});continue;
+          }
+          if (state.privatePlan && row.matchExisting) {
+            const peer=state.entries.find(other=>other.descriptor.id===row.matchExisting);
+            if (!peer || !peer.elements[0].isConnected || value(peer)!==row.value) {
+              results.push({id:row.id,status:'confirmation',reason:'入力済みのメールアドレスと一致しません。'});
+              continue;
+            }
           }
           if (state.privatePlan && before===row.value && current(entry,fingerprint) &&
               await snapshot(fingerprint,state.token)===await entry.fingerprint && value(entry)===before) {

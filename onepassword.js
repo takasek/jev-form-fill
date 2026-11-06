@@ -8,6 +8,17 @@ export async function startReview(doc, api, language) {
   const source = get('field'), destination = get('destination'), preview = get('preview'), fill = get('fill');
   doc.documentElement.lang = language;
   for (const node of doc.querySelectorAll('[data-i18n]')) node.textContent = t(node.dataset.i18n);
+  function setupIssue(message) {
+    get('status').textContent=t(message);
+    get('setupHelp').hidden=false;
+    get('setupHelp').open=message==='opSetup';
+    get('setupCommand').textContent='python3 native/install.py '+(api.extensionId || 'EXTENSION_ID')+" --profile '"+t('opVault')+"' IDENTITY_ITEM_ID";
+    if (api.rescan) {
+      get('profileRescan').hidden=false;
+      get('profileRescan').textContent=t('opRetry');
+      get('profileRescan').onclick=api.rescan;
+    }
+  }
   function option(select, id, label) {
     const node = doc.createElement('option');
     node.value = id;
@@ -25,7 +36,8 @@ export async function startReview(doc, api, language) {
       get('status').textContent = t('opProfileReading');
       const profile = await api.native({op:'profile'});
       if (!profile.fields?.length) {
-        get('status').textContent = t(profile.error ? 'opProfileError' : 'opEmptyProfile');
+        const auth=['authorization','timeout'].includes(profile.error);
+        setupIssue(auth ? 'opProfileAuth' : profile.error ? 'opProfileError' : 'opEmptyProfile');
         return;
       }
       reviewProfile(doc,scan,targets,profile.fields,api,t,reason=>localizeMessage(reason,language));
@@ -86,7 +98,10 @@ export async function startReview(doc, api, language) {
         get('status').textContent = localizeMessage(result.reason, language);
       } catch { get('status').textContent = t('opPageError'); }
     };
-  } catch { get('status').textContent = t(scan ? 'opSetup' : 'opPageError'); }
+  } catch {
+    if (scan) setupIssue('opSetup');
+    else get('status').textContent=t('opPageError');
+  }
 }
 
 if (typeof chrome !== 'undefined' && chrome.scripting) {
@@ -97,6 +112,7 @@ if (typeof chrome !== 'undefined' && chrome.scripting) {
     return response.result;
   }
   startReview(document, {
+    extensionId:chrome.runtime.id,
     scan:() => command({op:'scan', privateFill:true}),
     apply:command,
     verify:token=>command({op:'verify',privateFill:true,token}),

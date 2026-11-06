@@ -18,7 +18,19 @@ const rules = [
   ['organization', /^(?:会社名|勤務先名|法人名|company(?:name)?|organization)$/]
 ];
 const roles = new Set([...rules.map(([role]) => role),'tel-area-code','tel-local-prefix','tel-local-suffix']);
+// Explicit owners on individual labels can distinguish people within a single fieldset.
+const ownerPrefix=/^(保護者|お子(?:さま|様|さん)|子ども|子供|児童|本人|申込者|同伴者|受取人)(?:の|[：:])\s*|^(parent|guardian|child|applicant|recipient)(?:['’]s)?\s+/i;
+const confirmationLabel=/確認|再入力|もう一度|confirm|re.?enter/i;
+function inlineOwner(field) {
+  const label=field.label?.trim() || '';
+  const match=label.match(ownerPrefix);
+  if (match) return (match[1] || match[2]).toLowerCase();
+  // An unfamiliar qualifier such as お孫さんの氏名 still warrants a destination choice.
+  const qualified=label.match(/^([^\sの：:（）()]{1,24})の(.+)$/u);
+  return qualified && labelRole(qualified[2]) ? qualified[1] : '';
+}
 function labelRole(text = '') {
+  if (confirmationLabel.test(text) && /e[\s_-]?mail|メール/i.test(text)) return 'email';
   const specific = formatRole(text);
   if (specific) return specific;
   const label = text.replace(/[（(](?:確認用?|再入力)[)）]/g,'').replace(/[（(]\s*(?:姓[\s・/]+名|名[\s・/]+姓|first name[, /]+last name|last name[, /]+first name)\s*[）)]/gi,'');
@@ -28,7 +40,7 @@ function labelRole(text = '') {
 }
 function targetRole(field) {
   if (field.formatRole !== undefined) return field.formatRole;
-  const label = labelRole(field.label);
+  const label = labelRole(field.label?.trim().replace(ownerPrefix,''));
   const named = labelRole(field.name);
   const token = (field.autocomplete || '').split(/\s+/).find(token => roles.has(token));
   if (label === 'tel' && (token?.startsWith('tel-') || named?.startsWith('tel-'))) return token?.startsWith('tel-') ? token : named;
@@ -59,7 +71,7 @@ function sectionOf(field) {
   // A shipping tag on only the postal field should not split a named delivery section.
   const headingScope = addressSection({context:heading});
   return JSON.stringify([field.group ?? heading,tokens.find(token=>token.startsWith('section-')) || '',
-    scope || headingScope]);
+    scope || headingScope,inlineOwner(field)]);
 }
 
 export function profileSources(fields, targets) {
@@ -160,8 +172,8 @@ export function reviewProfile(doc, scan, targets, fields, api, t, localize) {
     if (!sections.has(key)) sections.set(key,[]);
     sections.get(key).push(field);
   }
-  const thirdParty = /緊急連絡先|配偶者|保護者|追加の|別の方|同行者|emergency contact|spouse|guardian/i;
-  const chooseSections = sections.size > 1 || targets.some(f=>thirdParty.test(f.sectionLabel ?? f.context));
+  const thirdParty = /緊急連絡先|配偶者|保護者|追加の|別の方|同行者|同伴者|お子(?:さま|様|さん)|子ども|子供|児童|emergency contact|spouse|guardian|\bchild\b/i;
+  const chooseSections = sections.size > 1 || targets.some(f=>inlineOwner(f) || thirdParty.test(f.sectionLabel ?? f.context));
   const sectionControls = new Map();
   const chooser = doc.getElementById('profileSections');
   if (chooseSections) {
@@ -172,7 +184,7 @@ export function reviewProfile(doc, scan, targets, fields, api, t, localize) {
       const scope = (first.autocomplete || '').split(/\s+/).find(tag=>tag === 'shipping' || tag === 'billing');
       const context = first.sectionLabel || first.context;
       const suffix = scope && scope !== addressSection({context}) ? t(scope === 'shipping'?'opShipping':'opBilling') : '';
-      const title = [context,suffix].filter(Boolean).join(' / ');
+      const title = [context,inlineOwner(first),suffix].filter(Boolean).join(' / ');
       const token = (first.autocomplete || '').split(/\s+/).find(tag=>tag.startsWith('section-'));
       const fields = members.slice(0,2).map(f=>f.label).join(' / ');
       const caption = [title,token?.slice(8),fields].filter(Boolean).join(' · ');
@@ -187,10 +199,10 @@ export function reviewProfile(doc, scan, targets, fields, api, t, localize) {
     const heading = field.sectionLabel ?? field.context ?? '';
     const context = field.context || '';
     const rowText = context.startsWith(heading) ? context.slice(heading.length) : context;
-    if (index < 0 || field.uncertainGroup || thirdParty.test([field.label,rowText].join(' '))) return -1;
+    if (index < 0 || field.uncertainGroup || thirdParty.test([field.label.replace(ownerPrefix,''),rowText].join(' '))) return -1;
     const same = sections.get(sectionOf(field)).filter(other=>proposals[targets.indexOf(other)] === index);
     if (same.length === 1) return index;
-    const confirmation = f => /確認|再入力|もう一度|confirm|re.?enter/i.test(f.label);
+    const confirmation = f => confirmationLabel.test(f.label);
     if (targetRole(field) === 'email' && same.length === 2 && same.filter(confirmation).length === 1 &&
         !same.some(f=>f.occupied)) return index;
     return -1;
@@ -256,12 +268,24 @@ export function reviewProfile(doc, scan, targets, fields, api, t, localize) {
   function enabled(row) {
     return (!row.section || row.section.checked) && (!row.replace || row.replace.checked);
   }
+  const attention=doc.getElementById('profileAttention');
+  const summary=doc.getElementById('reviewSummary');
+  const emailPairs=[];
+  for (const members of sections.values()) {
+    const emails=members.filter(f=>targetRole(f)==='email');
+    const confirm=emails.filter(f=>confirmationLabel.test(f.label));
+    if (emails.length===2 && confirm.length===1) {
+      emailPairs.push([emails.find(f=>f!==confirm[0]),confirm[0]].map(f=>rows[targets.indexOf(f)]));
+    }
+  }
   function updateCount() {
-    let count=0, invalid=false;
+    let count=0;
+    const problems=[],pending=[];
     for (const row of rows) {
       const value=reviewedValue(row);
       if (!enabled(row) || !value) {
         if (row.edit) row.preview.textContent='';
+        if (enabled(row)) pending.push(row);
         continue;
       }
       count++;
@@ -272,19 +296,39 @@ export function reviewProfile(doc, scan, targets, fields, api, t, localize) {
         (row.field.minLength > 0 && value.length < row.field.minLength);
       row.probe.value='';
       row.preview.textContent=mismatch ? t('opInvalid') : '';
-      invalid ||= mismatch;
+      if (mismatch) problems.push(row);
+    }
+    for (const [first,confirm] of emailPairs) {
+      if (enabled(first) && enabled(confirm) && reviewedValue(first) && reviewedValue(confirm) &&
+          reviewedValue(first)!==reviewedValue(confirm)) {
+        confirm.preview.textContent=t('opEmailMismatch');
+        problems.push(confirm);
+      }
     }
     fill.textContent = t('opFillMany',{count});
-    fill.disabled = count === 0 || invalid;
+    fill.disabled = count === 0 || problems.length>0;
+    summary.textContent=chooseSections && ![...sectionControls.values()].some(box=>box.checked)
+      ? t('opSelectSection') : t('opCounts',{count,skipped:rows.length-count});
+    const actionable=problems.length ? problems : pending;
+    attention.hidden=actionable.length===0;
+    attention.textContent=t(problems.length?'opFixFields':'opPendingFields',{n:actionable.length});
+    let next=0;
+    attention.onclick=()=>{
+      const row=actionable[next++ % actionable.length];
+      (row.edit || row.select).focus();
+    };
   }
   function enableRow(row) {
     const active = enabled(row);
     row.element.hidden = !!row.section && !row.section.checked;
     row.select.disabled = !active;
     if (row.edit) row.edit.disabled = !active;
-    row.select.value = active ? String(row.suggestion) : '';
-    if (row.select.selectedIndex < 0) row.select.value='';
-    row.select.onchange();
+    if (active && !row.initialized) {
+      row.initialized=true;
+      row.select.value=String(row.suggestion);
+      if (row.select.selectedIndex < 0) row.select.value='';
+      row.select.onchange();
+    } else updateCount();
   }
   for (const row of rows) {
     const {field,select,preview,edit} = row;
@@ -317,12 +361,23 @@ export function reviewProfile(doc, scan, targets, fields, api, t, localize) {
     }
   };
   status.textContent = t('opBatchHint');
+  container.before(status);
   fill.onclick = async () => {
     if (fill.disabled) return;
     fill.disabled = true;
+    attention.hidden=true;
+    attention.onclick=null;
+    summary.hidden=true;
     const selected = rows.filter(row => enabled(row) && reviewedValue(row) !== '');
     let writes = selected.map(row => ({id:row.field.id,value:formValue(row.field,reviewedValue(row)),
       ...(row.replace?.checked ? {overwrite:true} : {})}));
+    for (const pair of emailPairs) {
+      const untouched=pair.find(row=>row.field.occupied && !selected.includes(row));
+      if (!untouched) continue;
+      const partner=pair.find(row=>row!==untouched);
+      const write=writes.find(item=>item.id===partner.field.id);
+      if (write) write.matchExisting=untouched.field.id;
+    }
     for (const control of sectionControls.values()) { control.disabled=true; control.onchange=null; }
     for (const {select,preview,edit,replace} of rows) {
       if (replace) { replace.disabled=true; replace.onchange=null; }
@@ -336,6 +391,8 @@ export function reviewProfile(doc, scan, targets, fields, api, t, localize) {
     const total=writes.length;
     const verify=doc.getElementById('profileVerify');
     const rescan=doc.getElementById('profileRescan');
+    fill.hidden=true;
+    doc.getElementById('reviewActions').append(status,verify,rescan);
     function show(results) {
       for (const {field,preview} of rows) {
         const result=results.find(r=>r.id===field.id);
@@ -345,6 +402,7 @@ export function reviewProfile(doc, scan, targets, fields, api, t, localize) {
       const written=results.filter(r=>r.wrote || r.status==='filled').length;
       const notes=[t('opReadbackSummary',{written,matched,total})];
       if (results.some(r=>r.status==='stale')) notes.push(t('opTargetStale'));
+      if (results.some(r=>r.status==='confirmation')) notes.push(t('opExistingMismatch'));
       const indirect=results.filter(r=>r.status==='indirect').map(r=>rows.find(row=>row.field.id===r.id)?.field.label);
       if (indirect.length) notes.push(t('opIndirect',{labels:indirect.join(' / ')}));
       if (results.some(r=>r.status==='new-fields')) notes.push(t('opNewFields'));

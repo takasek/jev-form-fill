@@ -167,3 +167,51 @@ test('uses only the address suffix when the same identity supplies the separate 
     {label:'都道府県'},{label:'市区町村'},{label:'住所',hint:'町名・番地・建物名のみ入力してください'}]);
   await ui.apply();assert.equal(ui.writes.at(-1).value,'見本町4-8 青葉荘306');
 });
+
+test('inline parent and child destinations require choosing the identity owner',async()=>{
+  const ui=await review([{role:'name',label:'氏名',value:'架空 親'},{role:'email',label:'メール',value:'parent@example.test'}],[
+    {label:'保護者のメールアドレス',type:'email'},{label:'お子さまの氏名',autocomplete:'name'}]);
+  assert.ok(ui.document.querySelector('#profileFill').disabled);
+  const parent=[...ui.document.querySelectorAll('#profileSections label')].find(l=>l.textContent.includes('保護者'));
+  parent.querySelector('input').click();
+  await ui.apply();
+  assert.deepEqual(ui.writes,[{id:'f0',value:'parent@example.test'}]);
+});
+
+test('edited confirmation pairs must agree before applying and attention points to the problem',async()=>{
+  const ui=await review([{role:'email',label:'メール',value:'a@example.test'}],
+    ['メールアドレス','メールアドレス（確認用）'].map(label=>({label,type:'email'})));
+  const [email,confirm]=ui.document.querySelectorAll('#profileRows textarea');
+  email.value='order@example.test';email.oninput();
+  assert.ok(ui.document.querySelector('#profileFill').disabled);
+  ui.document.querySelector('#profileAttention').click();
+  assert.equal(ui.document.activeElement,confirm);
+  confirm.value=email.value;confirm.oninput();await ui.apply();
+  assert.deepEqual(ui.writes.map(w=>w.value),['order@example.test','order@example.test']);
+});
+
+test('temporarily hiding a section preserves manual changes but requires fresh overwrite consent',async()=>{
+  const ui=await review([{role:'name',label:'氏名',value:'架空 親'}],
+    [{label:'氏名',group:'a'},{label:'電話',group:'a',occupied:true},{label:'氏名',group:'b'}]);
+  const section=ui.document.querySelector('#profileSections input');
+  section.click();const edit=ui.document.querySelector('#edit-f0');edit.value='注文者';edit.oninput();
+  const overwrite=ui.document.querySelector('.row input');overwrite.click();section.click();section.click();
+  assert.equal(edit.value,'注文者');assert.equal(overwrite.checked,false);
+  await ui.apply();assert.deepEqual(ui.writes,[{id:'f0',value:'注文者'}]);
+});
+
+test('checks a plain English confirmation text box and recognizes a child’s role in a Japanese label',async()=>{
+  const ui=await review([{role:'email',label:'Email',value:'one@example.test'}],[{label:'Email'},{label:'Confirm email',name:'confirm_email'}]);
+  const confirm=ui.document.querySelector('#edit-f1');
+  confirm.value='two@example.test';confirm.oninput();assert.ok(ui.document.querySelector('#profileFill').disabled);
+  const family=await review([{role:'name',label:'氏名',value:'保護者'}],[{label:'お子さんの氏名',autocomplete:'name'}]);
+  assert.ok(family.document.querySelector('#profileFill').disabled);
+});
+
+test('checks the untouched member of an occupied email pair at its destination',async()=>{
+  const ui=await review([{role:'email',label:'Email',value:'a@example.test'}],[
+    {label:'Email',occupied:true},{label:'Confirm email'}]);
+  const confirm=ui.document.querySelector('#edit-f1');confirm.value='b@example.test';confirm.oninput();
+  await ui.apply();
+  assert.deepEqual(ui.writes,[{id:'f1',value:'b@example.test',matchExisting:'f0'}]);
+});
