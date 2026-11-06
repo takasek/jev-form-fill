@@ -239,8 +239,11 @@ export function pageCommand(request) {
       const token=crypto.randomUUID();
       const entries=collect(token);
       if (entries.length>160) throw new Error('160項目を超えています。対象フォームを分けてください。');
+      const previousEntries=request.previousToken && previous?.token===request.previousToken ? previous.entries :
+        request.previousToken && previous?.receipt?.token===request.previousToken ? previous.receipt.items.map(item=>item.entry) : [];
       const fields=entries.map(entry=>request.privateFill
-        ? {...entry.descriptor,occupied:occupied(entry)}
+        ? {...entry.descriptor,occupied:occupied(entry),
+          previousId:previousEntries?.find(old=>old.elements[0]===entry.elements[0])?.descriptor.id}
         : entry.descriptor);
       if (request.privateFill) {
         // Headings returned to the local reviewer may contain an earlier private value.
@@ -263,6 +266,12 @@ export function pageCommand(request) {
       }
       return {token,url:location.origin+location.pathname,title:doc.title,fields,unsupported:doc.querySelectorAll('[role=combobox]:not(select),[role=listbox]:not(select),iframe').length};
     } finally {opened.reverse().forEach(x=>{x.open=false;});}
+  }
+  if (request.op==='inspect') {
+    const state=globalThis[key];
+    const matching=state && state.url===location.href &&
+      (state.token===request.token || state.receipt?.token===request.token);
+    return {stale:!matching || !sameTarget(state.guards),progress:matching ? state.progress : undefined};
   }
   return (async()=>{
     const state=globalThis[key];
@@ -325,6 +334,7 @@ export function pageCommand(request) {
       }
       if (request.op!=='apply') throw new Error('不明な操作です。');
       const rows=new Map((request.rows||[]).map(x=>[x.id,x]));
+      if (state.privatePlan) state.progress={completed:0,total:rows.size,phase:'filling'};
       const receipt=state.privatePlan ? {token:state.token,
         items:state.entries.map(entry=>({id:entry.descriptor.id,node:entry.elements[0],entry,
           before:snapshot(value(entry),state.token)}))} : null;
@@ -369,7 +379,10 @@ export function pageCommand(request) {
           const retained=value(entry)===row.value;
           results.push({id:row.id,...(state.privatePlan ? {wrote:true} : {}),status:retained?'filled':'failed',reason:retained?'入力して読戻しを確認しました。':'ページが値を受け付けませんでした。'});
         } catch {results.push({id:row.id,status:'failed',reason:'この項目の入力に失敗しました。'});}
-        finally {opened.reverse().forEach(x=>{x.open=false;});}
+        finally {
+          if (state.privatePlan) state.progress.completed++;
+          opened.reverse().forEach(x=>{x.open=false;});
+        }
       }
       // A plan can be applied only once, even when some rows were deselected.
       if (receipt) {
@@ -383,6 +396,7 @@ export function pageCommand(request) {
         state.receipt=receipt;
         if (results.some(r=>r.status==='filled' || r.status==='failed')) {
           state.undo=[];
+          state.progress.phase='checking';
           await new Promise(resolve=>setTimeout(resolve,2000));
         }
         return await readReceipt(receipt);
@@ -399,6 +413,6 @@ export function pageCommand(request) {
       state.token=null;
       if (undo.length) state.undo=undo;
       return results;
-    } finally {state.busy=false;}
+    } finally {state.busy=false;state.progress=null;}
   })();
 }

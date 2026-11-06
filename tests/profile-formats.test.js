@@ -215,3 +215,74 @@ test('checks the untouched member of an occupied email pair at its destination',
   await ui.apply();
   assert.deepEqual(ui.writes,[{id:'f1',value:'b@example.test',matchExisting:'f0'}]);
 });
+
+test('choosing one complete phone fills its three parts together',async()=>{
+  const ui=await review([
+    {role:'tel',scope:'home',label:'home phone',value:'03-1234-5678'},
+    {role:'tel',scope:'mobile',label:'cell phone',value:'090-9876-5432'}],
+    ['市外局番','市内局番','加入者番号'].map(label=>({label,type:'tel'})));
+  const phones=ui.document.querySelector('#profilePhones select');
+  assert.ok(phones);
+  assert.match(phones.options[1].textContent,/03-1234-5678/);
+  assert.match(phones.options[2].textContent,/090-9876-5432/);
+  phones.selectedIndex=2;phones.onchange();
+  await ui.apply();
+  assert.deepEqual(ui.writes.map(row=>row.value),['090','9876','5432']);
+});
+
+test('a default phone remains useful beside a work phone, and row choices describe only compatible values',async()=>{
+  const ui=await review([
+    {role:'given-name',label:'first name',value:'花'},
+    {role:'tel',label:'default phone',value:'03-1234-5678'},
+    {role:'tel',scope:'work',label:'business',value:'06-9876-5432'}],
+    [{label:'電話番号（半角数字）',type:'tel'}]);
+  const select=ui.document.querySelector('#map-f0');
+  assert.equal(select.options.length,3);
+  assert.equal([...select.options].some(o=>o.textContent.includes('first name')),false);
+  await ui.apply();assert.deepEqual(ui.writes,[{id:'f0',value:'0312345678'}]);
+});
+
+test('common Japanese label annotations preserve the requested name and address part',async()=>{
+  const sources=[
+    {role:'family-name',label:'姓',value:'架空'},
+    {role:'given-name',label:'名',value:'花'},
+    {role:'family-kana',label:'セイ',value:'カクウ'},
+    {role:'given-kana',label:'メイ',value:'ハナ'},
+    {role:'street-address',label:'住所',value:'東京都架空市若葉町2-3-4 架空棟101'}
+  ];
+  for (const [label,expected] of [
+    ['お名前（漢字）','架空 花'],['氏名（全角）','架空 花'],['お名前（姓）','架空'],
+    ['フリガナ（セイ）','カクウ'],['建物名・部屋番号','架空棟101'],
+    ['マンション名・部屋番号','架空棟101'],['ご住所（番地まで）','東京都架空市若葉町2-3-4']
+  ]) {
+    const ui=await review(sources,[{label}]);await ui.apply();
+    assert.equal(ui.writes[0]?.value,expected,label);
+  }
+});
+
+test('an explicit 3+4 postal pair uses the correct part of a single stored postcode',async()=>{
+  const ui=await review([{role:'postal-code',label:'郵便番号',value:'150-0002'}],
+    [{label:'郵便番号',maxLength:3},{label:'郵便番号',maxLength:4}]);
+  await ui.apply();assert.deepEqual(ui.writes.map(r=>r.value),['150','0002']);
+});
+
+test('Address with address-line1 autocomplete accepts a stored address line',async()=>{
+  const ui=await review([{role:'address-line1',label:'住所1',value:'12 Example Street'}],
+    [{label:'Address',autocomplete:'address-line1'}]);
+  await ui.apply();assert.deepEqual(ui.writes,[{id:'f0',value:'12 Example Street'}]);
+});
+
+test('format annotations can be combined without overriding explicit hyphens or autocomplete parts',async()=>{
+  const source=[{role:'family-name',label:'姓',value:'架空'},{role:'given-name',label:'名',value:'花'},
+    {role:'family-kana',label:'セイ',value:'カクウ'},{role:'tel',label:'電話',value:'03-1234-5678'},
+    {role:'postal-code',label:'郵便番号',value:'150-0002'}];
+  for(const [label,expected] of [['お名前（姓）（漢字）','架空'],['お名前（名）（漢字）','花'],
+    ['フリガナ（セイ）（全角）','カクウ'],['自宅電話番号（市外局番）','03'],
+    ['電話番号（半角数字・ハイフンあり）','03-1234-5678'],
+    ['電話番号（半角数字、ハイフンは必須）','03-1234-5678']]){
+    const ui=await review(source,[{label}]);await ui.apply();assert.equal(ui.writes[0]?.value,expected,label);
+  }
+  const postal=await review(source,[{label:'郵便番号（前3桁）',maxLength:3,autocomplete:'postal-code'},
+    {label:'郵便番号（後4桁）',maxLength:4,autocomplete:'postal-code'}]);
+  await postal.apply();assert.deepEqual(postal.writes.map(row=>row.value),['150','0002']);
+});

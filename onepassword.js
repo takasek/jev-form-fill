@@ -113,8 +113,30 @@ if (typeof chrome !== 'undefined' && chrome.scripting) {
   }
   startReview(document, {
     extensionId:chrome.runtime.id,
-    scan:() => command({op:'scan', privateFill:true}),
+    scan:options => command({op:'scan', privateFill:true,...options}),
     apply:command,
+    inspect:token=>command({op:'inspect',privateFill:true,token}),
+    watch:(token,callback)=>{
+      let active=true,pending=false;
+      async function check() {
+        if (!active || pending) return;
+        pending=true;
+        try {
+          const state=await command({op:'inspect',privateFill:true,token});
+          if (active) callback(state);
+        } catch {if (active) callback({stale:true});}
+        finally {pending=false;}
+      }
+      const timer=setInterval(check,750);
+      window.addEventListener('focus',check);
+      const stop=()=>{
+        active=false;clearInterval(timer);
+        window.removeEventListener('focus',check);
+        window.removeEventListener('pagehide',stop);
+      };
+      window.addEventListener('pagehide',stop,{once:true});
+      return stop;
+    },
     verify:token=>command({op:'verify',privateFill:true,token}),
     rescan:()=>location.reload(),
     native:request => chrome.runtime.sendNativeMessage('local.jev_form_fill.onepassword', request)

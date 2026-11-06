@@ -13,7 +13,7 @@ const rules = [
   ['address-level1', /^(?:都道府県|prefecture|province|state)$/],
   ['address-level2', /^(?:市区町村|city|town)$/],
   ['address-line1', /^(?:住所1|addressline1|番地)$/],
-  ['address-line2', /^(?:建物名|住所2|addressline2|apartment)$/],
+  ['address-line2', /^(?:(?:建物名|マンション名|アパート名|ビル名)(?:部屋番号)?|部屋番号|住所2|addressline2|apartment)$/],
   ['street-address', /^(?:住所|ご住所|address|streetaddress)$/],
   ['organization', /^(?:会社名|勤務先名|法人名|company(?:name)?|organization)$/]
 ];
@@ -31,9 +31,11 @@ function inlineOwner(field) {
 }
 function labelRole(text = '') {
   if (confirmationLabel.test(text) && /e[\s_-]?mail|メール/i.test(text)) return 'email';
+  text=text.replace(/[（(](?:漢字|全角(?:文字)?|半角(?:数字)?)[)）]/g,'')
+    .replace(/^(?:配送先|請求先|お届け先|ご自宅|自宅|勤務先|仕事用|billing|shipping|home|work)(?:の|\s+)?/i, '');
   const specific = formatRole(text);
   if (specific) return specific;
-  const label = text.replace(/[（(](?:確認用?|再入力)[)）]/g,'').replace(/[（(]\s*(?:姓[\s・/]+名|名[\s・/]+姓|first name[, /]+last name|last name[, /]+first name)\s*[）)]/gi,'');
+  const label = text.replace(/[（(](?:確認用?|再入力|漢字|全角(?:文字)?|半角(?:数字)?)[)）]/g,'').replace(/[（(]\s*(?:姓[\s・/]+名|名[\s・/]+姓|first name[, /]+last name|last name[, /]+first name)\s*[）)]/gi,'');
   const normalized = label.replace(/[（(][^（()）]*(?:スペース|空白|ハイフン|数字のみ|hyphens)[^（()）]*[)）]/gi,'').normalize('NFKC').toLowerCase().replace(/[\s_():*・-]|必須|任意/g, '')
     .replace(/^(?:配送先|請求先|お届け先|ご自宅|自宅|勤務先|仕事用|billing|shipping|home|work)(?:の)?/, '');
   return rules.find(([,pattern]) => pattern.test(normalized))?.[0];
@@ -47,6 +49,8 @@ function targetRole(field) {
   const addressPart = ['parcel','parcel-rest','before-parcel','through-parcel','through-chome','after-chome'].includes(label);
   if (addressPart && ['street-address','address-line1','address-line2'].includes(token)) return label;
   if (label?.startsWith('tel-') && token === 'tel') return label;
+  if ((label==='postal-prefix' || label==='postal-suffix') && token==='postal-code') return label;
+  if (label === 'street-address' && token === 'address-line1') return token;
   if (label && token && label !== token) return '';
   return label || token || labelRole(field.name) || ({email:'email',tel:'tel'})[field.type];
 }
@@ -75,7 +79,7 @@ function sectionOf(field) {
 }
 
 export function profileSources(fields, targets) {
-  const sources = [...fields];
+  const sources = fields.map((source,origin)=>({...source,origin}));
   const targetRoles = targets.map(targetRole);
   const needed = new Set(targetRoles);
   const phoneParts = ['tel-area-code','tel-local-prefix','tel-local-suffix'];
@@ -85,7 +89,7 @@ export function profileSources(fields, targets) {
   const widths = group.length === 3 && group.every((field,i) => targetRoles[start+i] === phoneParts[i] &&
     targetRoles.lastIndexOf(phoneParts[i]) === start+i && sectionOf(field) === sectionOf(group[0]) &&
     field.maxLength > 0 && field.maxLength <= 5) ? group.map(f=>f.maxLength) : null;
-  for (const source of fields) {
+  for (const [origin,source] of fields.entries()) {
     const parts = derivedParts(source,widths) || {};
     if (source.role==='street-address' && needed.has('town-address')) {
       let suffix=source.value.trim().replace(/^〒\s*[0-9０-９]{3}[-－][0-9０-９]{4}\s*/, '');
@@ -98,7 +102,7 @@ export function profileSources(fields, targets) {
     }
     for (const [role,value] of Object.entries(parts)) {
       if (!value || !needed.has(role) || fields.some(f=>f.role===role && f.scope===source.scope)) continue;
-      sources.push({role,scope:source.scope,label:source.label,value});
+      sources.push({role,scope:source.scope,label:source.label,value,origin});
     }
   }
   for (const [full,given,family] of [['name','given-name','family-name'],['name-kana','given-kana','family-kana']]) {
@@ -106,7 +110,7 @@ export function profileSources(fields, targets) {
     const first=fields.filter(f=>f.role===given), last=fields.filter(f=>f.role===family);
     if (first.length === 1 && last.length === 1 && first[0].scope === last[0].scope) {
       const nameParts = [last[0].value, first[0].value];
-      const stored = fields.filter(f=>f.role === full);
+      const stored = sources.filter(f=>f.role === full);
       if (!stored.length) {
         sources.push({role:full,scope:first[0].scope,label:last[0].label+' + '+first[0].label,
           value:nameParts.join(' '),nameParts});
@@ -131,6 +135,9 @@ function proposedSource(field, sources) {
   if (scope) {
     const scoped = candidates.filter(s => s.scope === scope);
     candidates = scoped.length ? scoped : candidates.filter(s => !s.scope);
+  } else if (role==='tel' || role?.startsWith('tel-')) {
+    const defaults=candidates.filter(s=>!s.scope);
+    if (defaults.length===1) candidates=defaults;
   }
   if (candidates.length !== 1) return -1;
   return sources.indexOf(candidates[0]);
@@ -149,12 +156,38 @@ function formValue(field, value) {
   return matches.length === 1 ? matches[0].value : undefined;
 }
 
-export function reviewProfile(doc, scan, targets, fields, api, t, localize) {
+export function reviewProfile(doc, scan, targets, fields, api, t, localize, drafts=[]) {
   const container = doc.getElementById('profileRows'), fill = doc.getElementById('profileFill');
   const status = doc.getElementById('status');
+  const rescan=doc.getElementById('profileRescan'), verify=doc.getElementById('profileVerify');
+  let stale=false,applying=false,checking=false,stopWatching=()=>{};
+  container.replaceChildren();
+  doc.getElementById('profilePhones').replaceChildren();
+  doc.querySelectorAll('#profileSections label').forEach(label=>label.remove());
+  doc.getElementById('profileSections').hidden=true;
+  doc.getElementById('reviewSummary').hidden=false;
+  fill.hidden=false;
+  verify.hidden=rescan.hidden=true;
+  verify.onclick=rescan.onclick=null;
+  function draftKey(field) {
+    return JSON.stringify(['kind','type','label','context','sectionLabel','group','autocomplete','name','formatRole',
+      'placeholder','hint','pattern','min','max','step','maxLength','minLength'].map(key=>field[key]));
+  }
+  function sourceKey(source) {
+    return source && JSON.stringify([source.role,source.scope || '',source.value,source.origin]);
+  }
   // A generic address box can be followed by a separate parcel or building box.
   const rawRoles = targets.map(targetRole);
   targets = targets.map((field,index) => {
+    if (rawRoles[index] === 'postal-code') {
+      const previous=targets[index-1], next=targets[index+1];
+      if (field.maxLength===3 && next?.maxLength===4 && rawRoles[index+1]==='postal-code' && sectionOf(field)===sectionOf(next)) {
+        return {...field,formatRole:'postal-prefix'};
+      }
+      if (field.maxLength===4 && previous?.maxLength===3 && rawRoles[index-1]==='postal-code' && sectionOf(field)===sectionOf(previous)) {
+        return {...field,formatRole:'postal-suffix'};
+      }
+    }
     if (rawRoles[index] !== 'street-address') return field;
     const neighbors = rawRoles.filter((_,i)=>sectionOf(targets[i]) === sectionOf(field));
     if (neighbors.includes('address-level1') && neighbors.includes('address-level2') &&
@@ -194,12 +227,20 @@ export function reviewProfile(doc, scan, targets, fields, api, t, localize) {
     }
   }
   const proposals = targets.map(field=>proposedSource(field,sources));
+  function eligible(field) {
+    const heading=field.sectionLabel ?? field.context ?? '';
+    const context=field.context || '';
+    const rowText=context.startsWith(heading) ? context.slice(heading.length) : context;
+    return !field.uncertainGroup && !thirdParty.test([field.label.replace(ownerPrefix,''),rowText].join(' '));
+  }
+  function sourceCaption(source) {
+    const role=t('sourceRole_'+source.role);
+    const scope=source.scope ? t('sourceScope_'+source.scope)+' · ' : '';
+    return scope+(role.startsWith('sourceRole_') ? source.label : role)+' — '+source.value;
+  }
   const suggestions = targets.map((field,i)=>{
     const index = proposals[i];
-    const heading = field.sectionLabel ?? field.context ?? '';
-    const context = field.context || '';
-    const rowText = context.startsWith(heading) ? context.slice(heading.length) : context;
-    if (index < 0 || field.uncertainGroup || thirdParty.test([field.label.replace(ownerPrefix,''),rowText].join(' '))) return -1;
+    if (index < 0 || !eligible(field)) return -1;
     const same = sections.get(sectionOf(field)).filter(other=>proposals[targets.indexOf(other)] === index);
     if (same.length === 1) return index;
     const confirmation = f => confirmationLabel.test(f.label);
@@ -220,9 +261,11 @@ export function reviewProfile(doc, scan, targets, fields, api, t, localize) {
     label.textContent = repeated ? t('opNumbered',{caption,position:i+1}) : caption;
     select.add(new doc.defaultView.Option(t('opSkip'),''));
     for (const [index, source] of sources.entries()) {
+      const role=targetRole(field);
+      if (role && source.role!==role) continue;
       const formatted = formatSource(field,source);
       if (formatted === undefined || formValue(field,formatted) === undefined) continue;
-      select.add(new doc.defaultView.Option(source.label, String(index)));
+      select.add(new doc.defaultView.Option(sourceCaption(source), String(index)));
     }
     const section = sectionControls.get(sectionOf(field));
     let replace = null;
@@ -271,6 +314,33 @@ export function reviewProfile(doc, scan, targets, fields, api, t, localize) {
   const attention=doc.getElementById('profileAttention');
   const summary=doc.getElementById('reviewSummary');
   const emailPairs=[];
+  const phoneControls=new Map();
+  const completePhones=sources.filter(source=>source.role==='tel');
+  const phoneContainer=doc.getElementById('profilePhones');
+  if (completePhones.length>1) {
+    for (const [key,members] of sections) {
+      const general=rows.filter(row=>members.includes(row.field) && eligible(row.field) &&
+        /^tel(?:-|$)/.test(targetRole(row.field)) && !targetScope(row.field));
+      if (!general.length) continue;
+      const label=doc.createElement('label'),select=doc.createElement('select');
+      label.textContent=t('opChoosePhone')+(sections.size>1?' · '+(members[0].sectionLabel || members[0].context || ''):'');
+      select.add(new doc.defaultView.Option(t('opChoose'), ''));
+      for (const source of completePhones) select.add(new doc.defaultView.Option(sourceCaption(source),String(source.origin)));
+      const defaults=completePhones.filter(source=>!source.scope);
+      if (defaults.length===1) select.value=String(defaults[0].origin);
+      select.onchange=()=>{
+        const origin=select.value;
+        for (const row of general) {
+          if (!enabled(row) || members.filter(f=>targetRole(f)===targetRole(row.field)).length!==1) continue;
+          const index=sources.findIndex(source=>String(source.origin)===origin && source.role===targetRole(row.field));
+          row.select.value=index<0 ? '' : String(index);
+          row.select.onchange();
+        }
+      };
+      label.append(select);phoneContainer.append(label);
+      phoneControls.set(key,{label,select,general});
+    }
+  }
   for (const members of sections.values()) {
     const emails=members.filter(f=>targetRole(f)==='email');
     const confirm=emails.filter(f=>confirmationLabel.test(f.label));
@@ -281,6 +351,12 @@ export function reviewProfile(doc, scan, targets, fields, api, t, localize) {
   function updateCount() {
     let count=0;
     const problems=[],pending=[];
+    for (const {select,general} of phoneControls.values()) {
+      const active=general.filter(row=>enabled(row) && row.initialized);
+      if (!active.length) continue;
+      const origins=active.map(row=>row.select.value==='' || row.select.value==='manual' ? undefined : sources[Number(row.select.value)]?.origin);
+      select.value=origins[0]!==undefined && origins.every(origin=>origin===origins[0]) ? String(origins[0]) : '';
+    }
     for (const row of rows) {
       const value=reviewedValue(row);
       if (!enabled(row) || !value) {
@@ -306,7 +382,7 @@ export function reviewProfile(doc, scan, targets, fields, api, t, localize) {
       }
     }
     fill.textContent = t('opFillMany',{count});
-    fill.disabled = count === 0 || problems.length>0;
+    fill.disabled = stale || applying || checking || count === 0 || problems.length>0;
     summary.textContent=chooseSections && ![...sectionControls.values()].some(box=>box.checked)
       ? t('opSelectSection') : t('opCounts',{count,skipped:rows.length-count});
     const actionable=problems.length ? problems : pending;
@@ -359,12 +435,72 @@ export function reviewProfile(doc, scan, targets, fields, api, t, localize) {
       if (row.replace) row.replace.checked = false;
       enableRow(row);
     }
+    for (const [key,{label}] of phoneControls) label.hidden=!sectionControls.get(key)?.checked;
   };
-  status.textContent = t('opBatchHint');
+  for (const [key,{label}] of phoneControls) label.hidden=!!sectionControls.get(key) && !sectionControls.get(key).checked;
+  let restored=0;
+  const resumed=drafts.length>0;
+  for (const row of rows) {
+    const draft=drafts.find(item=>item.id===row.field.previousId && item.key===draftKey(row.field));
+    if (!draft) continue;
+    restored++;
+    row.initialized=true;
+    if (draft.mode==='manual' && row.edit) {
+      row.edit.value=draft.value;
+      row.edit.oninput();
+    } else {
+      row.select.value=draft.mode==='' ? '' : String(sources.findIndex(source=>sourceKey(source)===draft.source));
+      row.select.onchange();
+    }
+  }
+  drafts.length=0;
+  status.textContent = resumed ? t('opResumed',{count:restored}) : t('opBatchHint');
   container.before(status);
+  async function refreshReview() {
+    rescan.disabled=true;
+    fill.disabled=true;
+    stopWatching();
+    const saved=rows.filter(row=>row.initialized).map(row=>({id:row.field.id,key:draftKey(row.field),mode:row.select.value,
+      source:sourceKey(sources[Number(row.select.value)]),value:reviewedValue(row)}));
+    try {
+      const fresh=await api.scan({previousToken:scan.token});
+      reviewProfile(doc,fresh,fresh.fields.filter(field=>['text','select'].includes(field.kind)),fields,api,t,localize,saved);
+    } catch {
+      saved.length=0;
+      status.textContent=t('opPageError');
+    } finally {rescan.disabled=false;}
+  }
+  function notice(info) {
+    if (applying) {
+      if (info.progress) status.textContent=t(info.progress.phase==='checking'?'opCheckingProgress':'opFillProgress',info.progress);
+      return;
+    }
+    if (!info.stale || stale) return;
+    stale=true;
+    fill.disabled=true;
+    rescan.hidden=false;
+    rescan.textContent=t('opResume');
+    rescan.onclick=refreshReview;
+    status.textContent=t('opReviewInterrupted');
+    doc.getElementById('reviewActions').append(status,rescan);
+  }
+  if (api.watch) stopWatching=api.watch(scan.token,notice);
   fill.onclick = async () => {
     if (fill.disabled) return;
     fill.disabled = true;
+    if (api.inspect) {
+      checking=true;
+      try {
+        const info=await api.inspect(scan.token);
+        notice(info);
+        if (info.stale) return;
+      } catch {
+        notice({stale:true});
+        status.textContent=t('opPageError');
+        return;
+      } finally {checking=false;}
+    }
+    applying=true;
     attention.hidden=true;
     attention.onclick=null;
     summary.hidden=true;
@@ -379,18 +515,20 @@ export function reviewProfile(doc, scan, targets, fields, api, t, localize) {
       if (write) write.matchExisting=untouched.field.id;
     }
     for (const control of sectionControls.values()) { control.disabled=true; control.onchange=null; }
+    for (const {select} of phoneControls.values()) {select.replaceChildren();select.disabled=true;select.onchange=null;}
     for (const {select,preview,edit,replace} of rows) {
       if (replace) { replace.disabled=true; replace.onchange=null; }
       if (edit) { edit.value = ''; edit.disabled = true; edit.oninput = null; }
       select.disabled = true;
       select.onchange = null;
+      select.replaceChildren();
       preview.textContent = '';
     }
     sources.length = 0;
+    completePhones.length=0;
+    fields=[];
     fill.onclick = null;
     const total=writes.length;
-    const verify=doc.getElementById('profileVerify');
-    const rescan=doc.getElementById('profileRescan');
     fill.hidden=true;
     doc.getElementById('reviewActions').append(status,verify,rescan);
     function show(results) {
@@ -422,8 +560,9 @@ export function reviewProfile(doc, scan, targets, fields, api, t, localize) {
       }
     } catch { status.textContent=t('opPageError'); }
     finally {
+      stopWatching();
       writes=null;
-      if (api.rescan) { rescan.hidden=false; rescan.onclick=api.rescan; }
+      if (api.rescan) { rescan.hidden=false;rescan.textContent=t('opRescan');rescan.onclick=api.rescan; }
     }
   };
 }

@@ -1,15 +1,23 @@
 // Format cues and values stay in the private review window.
 export function formatRole(text = '') {
   const key = text.normalize('NFKC').trim().toLowerCase().replace(/[\s_():：・*-]/g,'').replace(/必須|任意/g,'');
+  const namePart=key.match(/^(お名前|氏名|名前|フリガナ|ふりがな|カナ)(姓|名|セイ|メイ|せい|めい)$/);
+  if (namePart) {
+    const family=/^(姓|セイ|せい)$/.test(namePart[2]);
+    const kana=/フリガナ|ふりがな|カナ/.test(namePart[1]) || /セイ|メイ|せい|めい/.test(namePart[2]);
+    return (family?'family-':'given-') + (kana?'kana':'name');
+  }
+  if (/^(?:郵便番号|postalcode|zip)(?:前(?:半)?3桁|上3桁|prefix)$/.test(key)) return 'postal-prefix';
+  if (/^(?:郵便番号|postalcode|zip)(?:後(?:半)?4桁|下4桁|suffix)$/.test(key)) return 'postal-suffix';
   if (/^(?:電話(?:番号)?|携帯電話|tel|phone)?(?:市外局番|1)$/.test(key) && key !== '1') return 'tel-area-code';
   if (/^(?:電話(?:番号)?|携帯電話|tel|phone)?(?:市内局番|2)$/.test(key) && key !== '2') return 'tel-local-prefix';
   if (/^(?:電話(?:番号)?|携帯電話|tel|phone)?(?:加入者番号|3)$/.test(key) && key !== '3') return 'tel-local-suffix';
-  if (/^(?:住所)?丁目まで$/.test(key)) return 'through-chome';
-  if (/^(?:住所)?丁目(?:より後|の後)$/.test(key)) return 'after-chome';
-  if (/^(?:住所)?(?:地番|番地)(?:のみ)?$/.test(key)) return 'parcel';
-  if (/^(?:住所)?(?:地番|番地)(?:以降|以下|建物名)$/.test(key)) return 'parcel-rest';
-  if (/^(?:住所)?(?:地番|番地)まで$/.test(key)) return 'through-parcel';
-  if (/^(?:住所)?(?:地番|番地)(?:より前|の前まで)$/.test(key)) return 'before-parcel';
+  if (/^(?:ご?住所)?丁目まで$/.test(key)) return 'through-chome';
+  if (/^(?:ご?住所)?丁目(?:より後|の後)$/.test(key)) return 'after-chome';
+  if (/^(?:ご?住所)?(?:地番|番地)(?:のみ)?$/.test(key)) return 'parcel';
+  if (/^(?:ご?住所)?(?:地番|番地)(?:以降|以下|建物名)$/.test(key)) return 'parcel-rest';
+  if (/^(?:ご?住所)?(?:地番|番地)まで$/.test(key)) return 'through-parcel';
+  if (/^(?:ご?住所)?(?:地番|番地)(?:より前|の前まで)$/.test(key)) return 'before-parcel';
   return '';
 }
 
@@ -37,6 +45,10 @@ function parcelParts(value) {
 }
 
 export function derivedParts(source, widths) {
+  if (source.role === 'postal-code') {
+    const digits=source.value.normalize('NFKC').replace(/^〒\s*/, '').replace(/[-‐‑−－]/g,'');
+    if (/^\d{7}$/.test(digits)) return {'postal-prefix':digits.slice(0,3),'postal-suffix':digits.slice(3)};
+  }
   if (source.role === 'name') {
     const parts = source.value.trim().split(/\s+/u);
     if (parts.length !== 2) return;
@@ -67,14 +79,16 @@ export function formatPhone(value, field) {
     if (a+b+c !== digits.length) return;
     return [digits.slice(0,a),digits.slice(a,a+b),digits.slice(a+b)].join('-');
   }
+  const withHyphens=/ハイフン(?:は)?(?:あり|有り|付き|必須|を含む)|with hyphens/i.test(text);
   if (/ハイフン(?:は)?(?:なし|無し|不要)|数字のみ|digits only|no hyphens/i.test(text) ||
+      (/半角数字/.test(text) && !/ハイフン|hyphen/i.test(text)) ||
       /^(?:\\d|\[0-9\])(?:\+|\{\d+(?:,\d*)?\})$/.test(pattern) || field.maxLength === digits.length) return digits;
   const example = (field.placeholder || '').normalize('NFKC').match(/^(?:例[：:]?\s*)?(0\d{1,4})-(\d{1,4})-(\d{4})$/);
   if (!normalized.includes('-') && example && digits.startsWith(example[1]) && digits.length === example[1].length + example[2].length + example[3].length) {
     const a=example[1].length, b=example[2].length;
     return [digits.slice(0,a),digits.slice(a,a+b),digits.slice(a+b)].join('-');
   }
-  if (/ハイフン(?:あり|有り|付き|必須)|with hyphens/i.test(text)) return normalized.includes('-') ? normalized : undefined;
+  if (withHyphens) return normalized.includes('-') ? normalized : undefined;
   return value;
 }
 

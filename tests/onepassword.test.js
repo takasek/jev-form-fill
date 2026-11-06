@@ -82,3 +82,38 @@ test('setup and identity failures offer actionable help and a local retry',async
     assert.equal(document.querySelector('#setupHelp').hidden,false);
   }
 });
+
+test('a page interaction is announced before apply and review can resume with edits without reading the vault again',async()=>{
+  const {pageCommand}=await import('../page.js');
+  const form=new JSDOM('<form><h2>連絡先</h2><label>メールアドレス<input type=email></label></form>',
+    {url:'https://example.test/contact',runScripts:'outside-only'});
+  form.window.HTMLElement.prototype.getClientRects=()=>[{width:100,height:20}];
+  form.window.TextEncoder=TextEncoder;
+  Object.defineProperty(form.window.crypto,'subtle',{value:crypto.subtle});
+  const command=form.window.eval('('+pageCommand.toString()+')');
+  const html=await readFile(new URL('../onepassword.html',import.meta.url),'utf8');
+  const document=new JSDOM(html).window.document;
+  let monitor,reads=0;
+  const api={
+    scan:options=>command({op:'scan',privateFill:true,...options}),
+    inspect:token=>command({op:'inspect',privateFill:true,token}),
+    watch:(token,callback)=>{monitor=()=>callback(command({op:'inspect',privateFill:true,token}));return ()=>{};},
+    native:async request=>request.op==='list'?{profile:true}:(reads++,{fields:[{role:'email',label:'Email',value:'stored@example.test'}]}),
+    apply:command
+  };
+  await startReview(document,api,'ja');
+  const edit=document.querySelector('#edit-f0');edit.value='order@example.test';edit.oninput();
+  form.window.document.querySelector('h2').click();
+  await monitor();
+  assert.equal(document.querySelector('#profileFill').disabled,true);
+  assert.equal(document.querySelector('#profileRescan').hidden,false);
+  assert.match(document.querySelector('#status').textContent,/確認/);
+  await document.querySelector('#profileRescan').onclick();
+  assert.equal(reads,1);
+  assert.equal(document.querySelector('#edit-f0').value,'order@example.test');
+  assert.equal(document.querySelector('#profileFill').disabled,false);
+  await document.querySelector('#profileFill').onclick();
+  assert.equal(form.window.document.querySelector('input').value,'order@example.test');
+  assert.equal(document.body.textContent.includes('order@example.test'),false);
+  form.window.close();
+});

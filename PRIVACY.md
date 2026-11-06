@@ -18,4 +18,6 @@ The macOS helper stores the chosen vault and identity item identifiers and its c
 
 After a 1Password fill, the extension blocks AI analysis of that document because the site could copy the value into field labels or headings.
 
+Before applying a fill, the review window temporarily keeps the retrieved fields and your edits. It can recheck destinations after you interact with the page without reading the vault again. Candidates and edits are cleared when you confirm the fill, and are also lost when the window closes.
+
 For read-only rechecks, the isolated page context keeps form element references and salted hashes until a new scan or page reload.

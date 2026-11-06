@@ -33,7 +33,23 @@ The telephone number is unknown; leave it unchanged.
 
 ## Fill a form from a 1Password identity on Mac
 
-Install the 1Password app and CLI (`op`) and enable CLI integration under Settings → Developer. Choose one Identity item, copy its item ID, and find the extension ID on `chrome://extensions`. Run this once from the extension folder with Python 3.9 or later.
+The standard Identity template supplies first and last names, company, email, phones and an address. The template in CLI 2.41.1 has no separate kana, postcode, prefecture or city fields. Missing values require manual entry. This extension uses the address string returned by the CLI and splits only explicit supported boundaries. It does not invent name readings, reorder addresses or infer prefectures and cities.
+
+For Japanese registration forms, add the text fields you need to the same identity. These example values are fictional. [How to add custom fields in 1Password](https://support.1password.com/custom-fields/)
+
+| Field name | Example | Destination |
+|---|---|---|
+| セイ | カクウ | Family-name reading, converted to the requested kana script |
+| メイ | ハナ | Given-name reading |
+| 郵便番号 | 150-0002 | Full postcode or separate 3- and 4-digit fields |
+| 都道府県 | 東京都 | Prefecture text or matching select option |
+| 市区町村 | 架空市 | City |
+| 番地 | 若葉町2-3-4 | The address portion intended for the street-number field |
+| 建物名 | 架空棟101 | Building and room |
+
+Supported alternatives include `氏名（姓 名）` for an explicitly ordered full name, `フリガナ` for its reading, and `住所1` / `住所2` for separate address lines. Without a separate postcode field, only an explicitly marked postcode such as `〒150-0002` in the address becomes a candidate.
+
+Install the 1Password app and CLI (`op`) and enable CLI integration under Settings → Developer. Choose one Identity item. Use `op item list --categories Identity --vault 'Vault name' --format=json` to see the titles and IDs, and find the extension ID on `chrome://extensions`. Run this once from the extension folder with Python 3.9 or later. [CLI item list reference](https://www.1password.dev/cli/reference/management-commands/item#item-list)
 
 ```sh
 python3 native/install.py EXTENSION_ID --profile 'Vault name' IDENTITY_ITEM_ID
@@ -41,9 +57,13 @@ python3 native/install.py EXTENSION_ID --profile 'Vault name' IDENTITY_ITEM_ID
 
 Open **Fill from 1Password** on a form. Review the proposed names, addresses and contact details together. Change any source or choose **Leave this field alone**, then fill the selection in one click. On forms with multiple sections, select the sections for this identity. An existing value is kept unless you choose **Replace the existing value** on that row. Text and single-select fields are supported. Private fills have no extension Undo history.
 
+When several phone numbers are available, choose **Phone number to use here** once to populate both whole and split phone fields. For an unqualified phone field, one unscoped number is used as the initial proposal if present. Source menus show the field purpose and value.
+
 The preview adapts names to explicit spacing and order, phone numbers to known groups or exact digit widths, and Japanese addresses to supported parcel boundaries. Edit the proposed text directly when the boundary or format is unclear.
 
-Clicking or using the keyboard on the original page can change who a field belongs to. If this happens during review, choose **Review the current form** and check the destination again. After a private write the extension waits about two seconds and reports direct writes, current matches and changes to other fields. Choose **Check current values** again after the website completes its own updates.
+Using the original page can change who a field belongs to. The review reports this when you return. Choose **Review the destination again** to rescan using the identity already loaded. Edits for the same fields are retained. Choose the person or sections and confirm any overwrite again. Progress shows the field count, followed by a two-second check for website updates. Choose **Check current values** again after later updates finish.
+
+To combine TypeSafe and 1Password, apply AI proposals first, then use 1Password. A private fill blocks AI analysis of that document because the website could copy personal values into headings or labels. It also clears any earlier AI Undo history. Make further corrections on the form. Reloading the page enables AI analysis again, but may discard entered values.
 
 Rerun the installer to switch identities. Existing `--field` configurations still support individual fills. Use `--chrome-data` for a custom Chrome data directory. To uninstall, remove `local.jev_form_fill.onepassword.json` and the `local.jev_form_fill.onepassword` folder from its `NativeMessagingHosts` folder.
 
