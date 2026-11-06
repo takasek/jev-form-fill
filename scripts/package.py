@@ -2,13 +2,11 @@
 import argparse
 import json
 from pathlib import Path
+import sys
 import zipfile
 
-FILES = ('manifest.json', 'popup.html', 'popup.css', 'popup.js', 'core.js',
-         'onepassword.html', 'onepassword.js', 'profile.js', 'profile-formats.js', 'native/host.py', 'native/install.py',
-         'page.js', 'client.js', 'i18n.js', '_locales/en/messages.json',
-         '_locales/ja/messages.json', 'README.md', 'README.ja.md', 'PRIVACY.md', 'PRIVACY.ja.md', 'LICENSE',
-         'docs/images/review-proposals.jpg', 'docs/images/filled-form.jpg')
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'native'))
+from stage import FILES
 
 def build(root, output):
     root, output = Path(root), Path(output)

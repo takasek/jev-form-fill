@@ -49,25 +49,37 @@ For Japanese registration forms, add the text fields you need to the same identi
 
 Supported alternatives include `氏名（姓 名）` for an explicitly ordered full name, `フリガナ` for its reading, and `住所1` / `住所2` for separate address lines. Without a separate postcode field, only an explicitly marked postcode such as `〒150-0002` in the address becomes a candidate.
 
-Install the 1Password app and CLI (`op`) and enable CLI integration under Settings → Developer. Choose one Identity item. Use `op item list --categories Identity --vault 'Vault name' --format=json` to see the titles and IDs, and find the extension ID on `chrome://extensions`. Run this once from the extension folder with Python 3.9 or later. [CLI item list reference](https://www.1password.dev/cli/reference/management-commands/item#item-list)
+Install the 1Password app and CLI (`op`) and enable CLI integration under Settings → Developer. Find the extension ID on `chrome://extensions`. Run this from the extension folder with Python 3.9 or later, then choose identities from the numbered list. Enter `1,2` to register more than one. You do not need to copy item IDs.
 
 ```sh
-python3 native/install.py EXTENSION_ID --profile 'Vault name' IDENTITY_ITEM_ID
+python3 native/install.py EXTENSION_ID --choose
 ```
 
-Open **Fill from 1Password** on a form. Review the proposed names, addresses and contact details together. Change any source or choose **Leave this field alone**, then fill the selection in one click. On forms with multiple sections, select the sections for this identity. An existing value is kept unless you choose **Replace the existing value** on that row. Text and single-select fields are supported. Private fills have no extension Undo history.
+Use `--choose 'Vault name'` to restrict the list. The existing `--profile 'Vault name' IDENTITY_ITEM_ID` option is also supported and can be repeated. Registration checks item metadata without reading contact values. [CLI item list reference](https://www.1password.dev/cli/reference/management-commands/item#item-list)
+
+Open **Fill from 1Password** on a form. If multiple identities are registered, choose one; only that item's contact fields are read. **Choose another identity** restarts the review without reinstalling, discarding edits in the review window. Review the proposed values, change any source or choose **Leave this field alone**, then fill the selection. Recognizable sections of one form, such as shipping details and surrounding contact fields, are proposed together when there is no indication of different people. Ambiguous sections and separate people still require a destination choice. An existing value is kept unless you choose **Replace the existing value** on that row. Text and single-select fields are supported. Private fills have no extension Undo history.
 
 When several phone numbers are available, choose **Phone number to use here** once to populate both whole and split phone fields. For an unqualified phone field, one unscoped number is used as the initial proposal if present. Source menus show the field purpose and value.
 
 The preview adapts names to explicit spacing and order, phone numbers to known groups or exact digit widths, and Japanese addresses to supported parcel boundaries. Edit the proposed text directly when the boundary or format is unclear.
 
+For Address fields (`address-line1`), a stored `住所1` or a two-line street address ending in an explicit apartment line such as `Unit 4` is supported. When a flat address cannot be split reliably, select **Full address — review before using**, then edit the value. Locality and country order are not inferred.
+
 Using the original page can change who a field belongs to. The review reports this when you return. Choose **Review the destination again** to rescan using the identity already loaded. Edits for the same fields are retained. Choose the person or sections and confirm any overwrite again. Progress shows the field count, followed by a two-second check for website updates. Choose **Check current values** again after later updates finish.
 
 To combine TypeSafe and 1Password, apply AI proposals first, then use 1Password. A private fill blocks AI analysis of that document because the website could copy personal values into headings or labels. It also clears any earlier AI Undo history. Make further corrections on the form. Reloading the page enables AI analysis again, but may discard entered values.
 
-Rerun the installer to switch identities. Existing `--field` configurations still support individual fills. Use `--chrome-data` for a custom Chrome data directory. To uninstall, remove `local.jev_form_fill.onepassword.json` and the `local.jev_form_fill.onepassword` folder from its `NativeMessagingHosts` folder.
+To add or remove registrations, rerun setup and select every identity you want to keep. Existing `--field` configurations still support individual fills. Use `--chrome-data` for a custom Chrome data directory.
+
+The helper uses a tested Python 3.9+ at `/usr/bin/python3`, `/opt/homebrew/bin/python3` or `/usr/local/bin/python3`, rather than the virtual environment used for setup. An alternative stable executable can be specified with `--python /absolute/path/python3`. After moving or removing Python, or changing the extension connection, run `python3 native/install.py EXTENSION_ID --repair` with the current extension ID to update the helper while preserving registered identities.
+
+Authorization frequency depends on the 1Password session, lock state and account. Starting a new CLI process does not by itself establish that every read requires Touch ID. Rechecking destinations within the review uses the loaded identity without another CLI read. The extension does not bypass authentication or save session credentials. [1Password authorization model](https://www.1password.dev/cli/app-integration-security)
+
+To uninstall, remove `local.jev_form_fill.onepassword.json` and the `local.jev_form_fill.onepassword` folder from its `NativeMessagingHosts` folder.
 
 ## Install
+
+On Mac, run `python3 native/stage.py` from the extracted distribution first. It copies the runtime to `~/Library/Application Support/Jev Form Fill/extension`; load that fixed folder in Chrome. Moving or deleting the download folder then has no effect. For updates, run the same command from the new download and reload the extension. Keep the installed folder in place: moving Chrome's load path changes its extension ID. If you intentionally move it, run the helper's `--repair` with the new ID to keep the registered identities. Use `--repair` for helper updates too.
 
 No build step or Node.js is required to use the extension.
 

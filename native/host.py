@@ -61,12 +61,22 @@ def profile_fields(item):
 
 
 def handle(request, config, read, read_item=None):
-    if 'profile' in config:
+    if not isinstance(request, dict):
+        return {'error': 'unknown-field'}
+    if 'profile' in config or 'profiles' in config:
         if request == {'op': 'list'}:
+            if 'profiles' in config:
+                return {'profiles': [{'id': key, 'label': value['label']} for key, value in config['profiles'].items()]}
             return {'profile': True}
-        if request != {'op': 'profile'}:
-            return {'error': 'unknown-field'}
-        registered = config['profile']
+        if 'profiles' in config:
+            if (set(request) != {'op', 'id'} or request['op'] != 'profile'
+                    or not isinstance(request.get('id'), str) or request['id'] not in config['profiles']):
+                return {'error': 'unknown-field'}
+            registered = config['profiles'][request['id']]
+        else:
+            if request != {'op': 'profile'}:
+                return {'error': 'unknown-field'}
+            registered = config['profile']
         fields = profile_fields(read_item(registered['vault'], registered['item']))
         if len(json.dumps(fields, ensure_ascii=False).encode('utf-8')) > 800_000:
             return {'error': 'profile-too-large'}

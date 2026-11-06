@@ -15,6 +15,38 @@ async function review(profile, fields) {
   return {document,writes,apply:()=>document.querySelector('#profileFill').onclick()};
 }
 
+test('a single shipping section and its surrounding contact fields do not require a person choice',async()=>{
+  const profile=[{role:'name',label:'Name',value:'架空 花'},{role:'email',label:'Email',value:'hana@example.test'}];
+  const ui=await review(profile,[
+    {label:'お名前',group:'shipping',formGroup:'0',sectionLabel:'配送先',autocomplete:'shipping name'},
+    {label:'メールアドレス',type:'email',group:'root',formGroup:'0',sectionLabel:''}]);
+  assert.equal(ui.document.querySelector('#profileSections').hidden,true);
+  await ui.apply();assert.deepEqual(ui.writes.map(x=>x.value),['架空 花','hana@example.test']);
+  for(const extra of [{formGroup:'1'}, {sectionLabel:'同伴者'}, {autocomplete:'section-other email'}, {label:'Partner email',sectionLabel:'Contact'}]){
+    const guarded=await review(profile,[
+      {label:'お名前',group:'shipping',formGroup:'0',sectionLabel:'配送先',autocomplete:'section-self shipping name'},
+      {label:'メールアドレス',type:'email',group:'other',formGroup:'0',sectionLabel:'',...extra}]);
+    assert.equal(guarded.document.querySelector('#profileSections').hidden,false);
+    assert.equal(guarded.document.querySelector('#profileFill').disabled,true);
+  }
+});
+
+test('an English address line gets a stored street without duplicating a separate apartment',async()=>{
+  const ui=await review([{role:'street-address',label:'Address',value:'123 Example Street\nUnit 4'}],[
+    {label:'Address',autocomplete:'address-line1'}, {label:'Apartment',autocomplete:'address-line2'}]);
+  await ui.apply();assert.deepEqual(ui.writes.map(x=>x.value),['123 Example Street','Unit 4']);
+  const unknown=await review([{role:'street-address',label:'Address',value:'若葉町2-3-4, 架空市, 東京都, 1500002, jp'}],
+    [{label:'Address',autocomplete:'address-line1'}]);
+  assert.equal(unknown.document.querySelector('#map-f0').value,'');
+  const options=[...unknown.document.querySelector('#map-f0').options];
+  const full=options.find(o=>o.textContent.includes('若葉町2-3-4'));
+  assert.ok(full,'full stored address must be available for explicit review');
+  assert.match(full.textContent,/要確認/);
+  const country=await review([{role:'street-address',label:'Address',value:'123 Example Street\nUnited States'}],
+    [{label:'Address',autocomplete:'address-line1'},{label:'Apartment',autocomplete:'address-line2'}]);
+  assert.equal(country.document.querySelector('#edit-f1').value,'');
+});
+
 test('uses each destination’s name separator, preserving stored family and given names',async()=>{
   for (const [hint,expected] of [['姓と名の間に全角スペース','朝日　花子'],['スペースなし','朝日花子']]) {
     const ui=await review([{role:'family-name',label:'姓',value:'朝日'},{role:'given-name',label:'名',value:'花子'}],

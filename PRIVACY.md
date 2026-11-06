@@ -14,7 +14,7 @@ Filled values are visible to the destination website. Its input/change handlers 
 
 There is no analytics or application backend. GitHub distributes the code and does not receive extension analysis requests. The local test server records submitted fictional data under `.local/form-fill-lab/receipts/` on your computer; that directory is excluded from Git.
 
-The macOS helper stores the chosen vault and identity item identifiers and its configuration. Opening the review reads that one item with the CLI. Only supported identity fields, such as names, addresses and contact details, reach the review window. Notes and credentials are excluded. Matching and preview run locally. Only confirmed values are applied to the destination site. Values are excluded from AI requests, extension storage, diagnostics and Undo history. Legacy field registrations use saved field references and labels.
+The macOS helper stores the registered vault and identity item identifiers, their titles and vault names for selection, and its configuration. Setup shows item metadata locally without reading contact values. In the review, only the selected registered identity is read with the CLI; a single registration is read automatically. Only supported identity fields, such as names, addresses and contact details, reach the review window. Notes and credentials are excluded. Matching and preview run locally. Only confirmed values are applied to the destination site. Values are excluded from AI requests, extension storage, diagnostics and Undo history. Legacy field registrations use saved field references and labels.
 
 After a 1Password fill, the extension blocks AI analysis of that document because the site could copy the value into field labels or headings.
 

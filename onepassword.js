@@ -12,7 +12,7 @@ export async function startReview(doc, api, language) {
     get('status').textContent=t(message);
     get('setupHelp').hidden=false;
     get('setupHelp').open=message==='opSetup';
-    get('setupCommand').textContent='python3 native/install.py '+(api.extensionId || 'EXTENSION_ID')+" --profile '"+t('opVault')+"' IDENTITY_ITEM_ID";
+    get('setupCommand').textContent='python3 native/install.py '+(api.extensionId || 'EXTENSION_ID')+' --choose';
     if (api.rescan) {
       get('profileRescan').hidden=false;
       get('profileRescan').textContent=t('opRetry');
@@ -32,15 +32,38 @@ export async function startReview(doc, api, language) {
     const targets = scan.fields.filter(field => ['text','select'].includes(field.kind));
     if (!targets.length) { get('status').textContent = t('opNoFields'); return; }
     const registration = await api.native({op:'list'});
-    if (registration.profile) {
-      get('status').textContent = t('opProfileReading');
-      const profile = await api.native({op:'profile'});
-      if (!profile.fields?.length) {
-        const auth=['authorization','timeout'].includes(profile.error);
-        setupIssue(auth ? 'opProfileAuth' : profile.error ? 'opProfileError' : 'opEmptyProfile');
-        return;
+    if (registration.profile || registration.profiles?.length) {
+      const identities=registration.profiles;
+      const identity=get('identity');
+      async function loadProfile(id) {
+        identity.disabled=true;
+        get('setupHelp').hidden=true;
+        get('status').textContent = t('opProfileReading');
+        try {
+          const profile = await api.native(id ? {op:'profile',id} : {op:'profile'});
+          if (!profile.fields?.length) {
+            const auth=['authorization','timeout'].includes(profile.error);
+            setupIssue(auth ? 'opProfileAuth' : profile.error ? 'opProfileError' : 'opEmptyProfile');
+            identity.disabled=false;
+            return;
+          }
+          reviewProfile(doc,scan,targets,profile.fields,api,t,reason=>localizeMessage(reason,language));
+          if (identities?.length>1 && api.rescan) {
+            get('changeIdentity').hidden=false;
+            get('changeIdentity').onclick=api.rescan;
+          }
+        } catch {
+          setupIssue('opProfileError');
+          identity.disabled=false;
+        }
       }
-      reviewProfile(doc,scan,targets,profile.fields,api,t,reason=>localizeMessage(reason,language));
+      if (identities?.length>1) {
+        get('identityChoice').hidden=false;
+        option(identity,'',t('opChoose'));
+        for (const entry of identities) option(identity,entry.id,entry.label);
+        identity.onchange=()=>identity.value && loadProfile(identity.value);
+        get('status').textContent=t('opChooseIdentity');
+      } else await loadProfile(identities?.[0].id);
       return;
     }
     const textTargets = targets.filter(f => f.kind === 'text');

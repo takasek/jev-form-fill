@@ -146,6 +146,7 @@ export function pageCommand(request) {
         ? [heading,region.caption].filter(Boolean).join(' / ') : heading;
       base.context=sectionLabel + base.context.slice(heading.length);
       Object.assign(base,{
+      formGroup:String(Array.from(doc.forms).indexOf(element.form)),
       group:JSON.stringify([Array.from(doc.forms).indexOf(element.form),
         Array.from(doc.querySelectorAll('fieldset,section,article')).indexOf(element.closest('fieldset,section,article')),
         region.node ? Array.from(doc.querySelectorAll('div,section,article,fieldset,form,[role=group],[role=region]')).indexOf(region.node) : -1,

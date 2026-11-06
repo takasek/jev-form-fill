@@ -5,6 +5,24 @@ import {createRequire} from 'node:module';
 import {startReview} from '../onepassword.js';
 const {JSDOM}=createRequire(import.meta.url)(process.env.JEV_TEST_DEPS || 'jsdom');
 
+test('registered identities are chosen before reading and can be changed without reinstalling',async()=>{
+  const document=new JSDOM(await readFile(new URL('../onepassword.html',import.meta.url),'utf8')).window.document;
+  const reads=[];let restarted=0;
+  await startReview(document,{
+    scan:async()=>({fields:[{id:'a',kind:'text',type:'email',label:'Email'}]}),
+    native:async request=>request.op==='list'?{profiles:[{id:'a',label:'Personal'},{id:'b',label:'Work'}]}:
+      (reads.push(request),{fields:[{role:'email',label:'Email',value:'work@example.test'}]}),
+    rescan:()=>restarted++
+  },'en');
+  assert.deepEqual(reads,[]);
+  const select=document.querySelector('#identity');
+  select.value='b';await select.onchange();
+  assert.deepEqual(reads,[{op:'profile',id:'b'}]);
+  assert.equal(document.querySelector('#edit-a').value,'work@example.test');
+  document.querySelector('#changeIdentity').click();
+  assert.equal(restarted,1);
+});
+
 test('only reads the selected source, then fills the corrected destination on explicit apply', async()=>{
   const html=await readFile(new URL('../onepassword.html',import.meta.url),'utf8');
   const {window:{document}}=new JSDOM(html);

@@ -69,6 +69,7 @@ function addressSection(field) {
 }
 
 function sectionOf(field) {
+  if (field.reviewSection) return field.reviewSection;
   const tokens = (field.autocomplete || '').toLowerCase().split(/\s+/);
   const heading = field.sectionLabel ?? field.context ?? '';
   const scope = tokens.find(token=>token === 'shipping' || token === 'billing') || '';
@@ -91,6 +92,20 @@ export function profileSources(fields, targets) {
     field.maxLength > 0 && field.maxLength <= 5) ? group.map(f=>f.maxLength) : null;
   for (const [origin,source] of fields.entries()) {
     const parts = derivedParts(source,widths) || {};
+    if (source.role==='street-address' && needed.has('address-line1') &&
+        !fields.some(field=>field.role==='address-line1' && field.scope===source.scope)) {
+      const lines=source.value.trim().split(/\r?\n/).map(line=>line.trim()).filter(Boolean);
+      const apartment=/^(?:(?:apt\.?|apartment|unit|suite|ste\.?|room)\s+|#\s*)\S/i;
+      if (lines.length===2 && apartment.test(lines[1])) {
+        parts['address-line1']=lines[0];
+        parts['address-line2']=lines[1];
+      } else {
+        // A flat address may include locality/country in an unknown order. Keep it as
+        // an explicit fallback instead of inventing a street/city boundary.
+        sources.push({role:'address-line1',scope:source.scope,label:source.label,
+          value:source.value,origin,manualOnly:true});
+      }
+    }
     if (source.role==='street-address' && needed.has('town-address')) {
       let suffix=source.value.trim().replace(/^〒\s*[0-9０-９]{3}[-－][0-9０-９]{4}\s*/, '');
       for (const role of ['address-level1','address-level2']) {
@@ -127,7 +142,7 @@ export function profileSources(fields, targets) {
 function proposedSource(field, sources) {
   const role = targetRole(field);
   if (!role) return -1;
-  let candidates = sources.filter(source => source.role === role);
+  let candidates = sources.filter(source => source.role === role && !source.manualOnly);
   if (role==='tel' && /固定(?:電話|回線)|landline/i.test([field.label,field.hint].join(' '))) {
     candidates=candidates.filter(source=>source.scope!=='mobile' && /固定(?:電話|回線)|landline/i.test(source.label));
   }
@@ -176,6 +191,25 @@ export function reviewProfile(doc, scan, targets, fields, api, t, localize, draf
   function sourceKey(source) {
     return source && JSON.stringify([source.role,source.scope || '',source.value,source.origin]);
   }
+  // Merge only recognizable layout sections of one form, never multiple people/forms.
+  const neutralHeading=/^(?:|注文|会員登録|登録|個人情報|お客様情報|基本情報|お名前|連絡先|連絡先情報|配送先|お届け先|配送先住所|請求先|請求先住所|checkout|contact(?: information| details)?|shipping(?: address| information)?|billing(?: address)?|personal (?:information|details)|name)$/i;
+  const formGroups=new Set(targets.map(field=>field.formGroup));
+  const autocompleteGroups=new Set(targets.flatMap(field=>(field.autocomplete || '').split(/\s+/).filter(token=>token.startsWith('section-'))));
+  const addressScopes=new Set(targets.map(addressSection).filter(Boolean));
+  const duplicateRoles=new Map();
+  for (const field of targets) {
+    const role=targetRole(field);
+    if (role) duplicateRoles.set(role,[...(duplicateRoles.get(role)||[]),field]);
+  }
+  const distinctRoles=[...duplicateRoles].every(([role,members])=>members.length===1 ||
+    (role==='email' && members.length===2 && members.filter(field=>confirmationLabel.test(field.label)).length===1) ||
+    (role==='postal-code' && members.length===2 && members[0].maxLength===3 && members[1].maxLength===4));
+  const simpleLayout=formGroups.size===1 && targets[0]?.formGroup !== undefined && targets[0]?.formGroup !== '-1' &&
+    autocompleteGroups.size<=1 && addressScopes.size<=1 && distinctRoles &&
+    targets.every(field=>!field.uncertainGroup && !inlineOwner(field) &&
+      (!targetRole(field) || !!labelRole(field.label)) &&
+      (field.sectionLabel ?? field.context ?? '').split(' / ').every(heading=>neutralHeading.test(heading.trim())));
+  if (simpleLayout) targets=targets.map(field=>({...field,reviewSection:'single-person-layout'}));
   // A generic address box can be followed by a separate parcel or building box.
   const rawRoles = targets.map(targetRole);
   targets = targets.map((field,index) => {
@@ -236,7 +270,7 @@ export function reviewProfile(doc, scan, targets, fields, api, t, localize, draf
   function sourceCaption(source) {
     const role=t('sourceRole_'+source.role);
     const scope=source.scope ? t('sourceScope_'+source.scope)+' · ' : '';
-    return scope+(role.startsWith('sourceRole_') ? source.label : role)+' — '+source.value;
+    return scope+(source.manualOnly ? t('opFullAddressReview') : role.startsWith('sourceRole_') ? source.label : role)+' — '+source.value;
   }
   const suggestions = targets.map((field,i)=>{
     const index = proposals[i];
