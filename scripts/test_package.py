@@ -15,6 +15,28 @@ package = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(package)
 
 class PackageTests(unittest.TestCase):
+    def test_staging_from_a_moved_distribution_keeps_the_same_runtime_path(self):
+        import shutil
+        sys.path.insert(0,str(ROOT/'native'))
+        from stage import stage
+        with tempfile.TemporaryDirectory(prefix='jev-stage-') as folder:
+            root=Path(folder).resolve();source=root/'download';destination=root/'stable'/'extension'
+            archive=root/'download.zip';package.build(ROOT,archive)
+            with zipfile.ZipFile(archive) as z:z.extractall(source)
+            stage(source/'jev-form-fill',destination)
+            (destination/'keep.txt').write_text('user note')
+            moved=root/'moved-download';shutil.move(source,moved)
+            (moved/'jev-form-fill/popup.css').write_text('/* fixture update */')
+            self.assertEqual(stage(moved/'jev-form-fill',destination),destination)
+            self.assertEqual((destination/'popup.css').read_text(),'/* fixture update */')
+            self.assertEqual((destination/'keep.txt').read_text(),'user note')
+            alias=root/'alias';alias.symlink_to(destination.parent, target_is_directory=True)
+            with self.assertRaises(ValueError):stage(moved/'jev-form-fill',alias/'extension')
+            self.assertEqual((destination/'keep.txt').read_text(),'user note')
+            (moved/'jev-form-fill/profile.js').unlink()
+            with self.assertRaises(ValueError):stage(moved/'jev-form-fill',destination)
+            self.assertTrue((destination/'profile.js').is_file())
+
     def test_packaging_works_with_an_ascii_process_locale(self):
         with tempfile.TemporaryDirectory(prefix='jev-package-') as tmp:
             result = subprocess.run([sys.executable, str(ROOT / 'scripts/package.py'), '--output', str(Path(tmp) / 'extension.zip')], env={**os.environ, 'PYTHONUTF8': '0', 'PYTHONCOERCECLOCALE': '0', 'LC_ALL': 'C'}, capture_output=True)

@@ -145,3 +145,108 @@ test('undo restores an original incomplete email value instead of validating it 
   assert.equal(result[0]?.status,'restored');
   assert.equal(dom.window.document.querySelector('#e').value,'unfinished');
 });
+test('later AI analysis cannot collect a private value reflected in a heading', async()=>{
+  const {dom,command}=fixture('<form><h2>Contact</h2><label>Name<input></label></form>');
+  dom.window.TextEncoder=TextEncoder;
+  Object.defineProperty(dom.window.crypto,'subtle',{value:crypto.subtle});
+  const doc=dom.window.document;
+  doc.querySelector('input').oninput=event=>{doc.querySelector('h2').textContent=event.target.value;};
+  const scan=await command({op:'scan',privateFill:true});
+  await command({op:'apply',privateFill:true,token:scan.token,rows:[{id:'f0',value:'private fixture'}]});
+  assert.equal(command({op:'scan'}).privatePage,true);
+  const state=dom.window.__jevFormFillPrivateV1;
+  assert.equal(state.entries.length,0);
+  assert.equal(state.undo.length,0);
+  const next=await command({op:'scan',privateFill:true});
+  assert.equal(next.fields.length,1);
+  const [entry]=dom.window.__jevFormFillPrivateV1.entries;
+  assert.notEqual(await entry.before,'private fixture');
+  assert.doesNotMatch(JSON.stringify(entry.descriptor),/private fixture/);
+  assert.doesNotMatch(await entry.fingerprint,/private fixture/);
+  dom.window.close();
+});
+
+test('rejecting an invalid private value leaves the normal form available',async()=>{
+  const {dom,command}=fixture('<label>Email<input type=email></label>');
+  dom.window.TextEncoder=TextEncoder;
+  Object.defineProperty(dom.window.crypto,'subtle',{value:crypto.subtle});
+  const scan=await command({op:'scan',privateFill:true});
+  const result=await command({op:'apply',privateFill:true,token:scan.token,rows:[{id:'f0',value:'invalid'}]});
+  assert.equal(result[0].status,'skip');
+  assert.equal(command({op:'scan'}).fields.length,1);
+  dom.window.close();
+});
+
+function privateFixture(html) {
+  const f=fixture(html);
+  f.dom.window.TextEncoder=TextEncoder;
+  Object.defineProperty(f.dom.window.crypto,'subtle',{value:crypto.subtle});
+  return f;
+}
+test('a recipient switch invalidates a reviewed private fill even if the same empty input is reused',async()=>{
+  const {dom,command}=privateFixture('<form><input type=radio name=p checked><input type=radio name=p><label>メール<input type=email></label></form>');
+  const scan=command({op:'scan',privateFill:true});
+  dom.window.document.querySelectorAll('[type=radio]')[1].click();
+  const results=await command({op:'apply',privateFill:true,token:scan.token,rows:[{id:'f0',value:'owner@example.test'}]});
+  assert.equal(dom.window.document.querySelector('[type=email]').value,'');
+  assert.equal(results[0].status,'stale');
+  dom.window.close();
+});
+test('private sections preserve visible informal and ARIA-referenced recipient names',()=>{
+  for(const sections of [
+    '<div><strong>購入者</strong><label>メール<input></label></div><div><strong>受取人</strong><label>姓<input></label></div>',
+    '<div><p>購入者</p><label>メール<input></label></div><div><p>受取人</p><label>姓<input></label></div>',
+    '<section aria-labelledby=a><p id=a>購入者</p><label>メール<input></label></section><section aria-labelledby=b><p id=b>受取人</p><label>姓<input></label></section>'
+  ]) {
+    const {dom,command}=privateFixture('<form><h1>チケット</h1>'+sections+'</form>');
+    const [a,b]=command({op:'scan',privateFill:true}).fields;
+    assert.notEqual(a.group,b.group);assert.match(a.sectionLabel,/購入者/);assert.match(b.sectionLabel,/受取人/);
+    dom.window.close();
+  }
+});
+test('private fill reports indirect changes and can check again after a late site update',async()=>{
+  const {dom,command}=privateFixture('<form><label>郵便番号<input></label><label>市区町村<input value=手入力市></label></form>');
+  const [zip,city]=dom.window.document.querySelectorAll('input');
+  zip.oninput=()=>{city.value='補完市'};
+  const scan=command({op:'scan',privateFill:true});
+  const results=await command({op:'apply',privateFill:true,token:scan.token,rows:[{id:'f0',value:'1000001'}]});
+  assert.ok(results.some(r=>r.id==='f1' && r.status==='indirect'));
+  zip.value='1111111';
+  const later=await command({op:'verify',privateFill:true,token:scan.token});
+  assert.ok(later.some(r=>r.id==='f0' && r.status==='changed'));
+  dom.window.close();
+});
+
+test('ARIA recipient tabs implemented as input buttons invalidate the private plan',async()=>{
+  const {dom,command}=privateFixture('<form><input type=button role=tab aria-selected=true><input type=button role=tab aria-selected=false><label>メール<input type=email></label></form>');
+  const scan=command({op:'scan',privateFill:true});
+  const [a,b]=dom.window.document.querySelectorAll('[role=tab]');
+  a.setAttribute('aria-selected','false');b.setAttribute('aria-selected','true');
+  const r=await command({op:'apply',privateFill:true,token:scan.token,rows:[{id:'f0',value:'test@example.test'}]});
+  assert.equal(r[0].status,'stale');assert.equal(dom.window.document.querySelector('[type=email]').value,'');
+  dom.window.close();
+});
+
+test('activating a plain editor button invalidates a private review of the reused field',async()=>{
+  const {dom,command}=privateFixture('<form><button type=button>家族を編集</button><label>メール<input type=email></label></form>');
+  const scan=command({op:'scan',privateFill:true});
+  dom.window.document.querySelector('button').click();
+  const r=await command({op:'apply',privateFill:true,token:scan.token,rows:[{id:'f0',value:'owner@example.test'}]});
+  assert.equal(r[0].status,'stale');assert.equal(dom.window.document.querySelector('input').value,'');
+  dom.window.close();
+});
+
+test('a confirmation must match an existing counterpart on the page before writing',async()=>{
+  const {dom,command}=privateFixture('<form><label>Email<input value="original@example.test"></label><label>Confirm email<input></label></form>');
+  const scan=command({op:'scan',privateFill:true});
+  const result=await command({op:'apply',privateFill:true,token:scan.token,rows:[{id:'f1',value:'other@example.test',matchExisting:'f0'}]});
+  assert.equal(result[0].status,'confirmation');assert.equal(dom.window.document.querySelectorAll('input')[1].value,'');
+});
+
+test('an unmarked clickable row can also switch drafts while reviewing',async()=>{
+  const {dom,command}=privateFixture('<table><tr tabindex=0><td>家族</td></tr></table><label>メール<input></label>');
+  const scan=command({op:'scan',privateFill:true});
+  dom.window.document.querySelector('td').click();
+  const r=await command({op:'apply',privateFill:true,token:scan.token,rows:[{id:'f0',value:'owner@example.test'}]});
+  assert.equal(r[0].status,'stale');assert.equal(dom.window.document.querySelector('input').value,'');
+});

@@ -2,6 +2,7 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Jev Form Fill</title><link rel="stylesheet" href="popup.css"></head><body>
 <header><div class="mark">J</div><div><h1>Jev Form Fill</h1><p data-i18n="subtitle">Copied text. The right fields.</p></div><div class="language-control"><label for="language" data-i18n="language">Language</label><select id="language"><option value="auto" data-i18n="auto">Browser language</option><option value="en">English</option><option value="ja">日本語</option></select></div></header>
 <main><div id="target" class="target">Checking the target page…</div>
+<button id="onepassword" class="secondary" data-i18n="opOpen">Fill from 1Password</button>
 <label for="source" class="heading" data-i18n="sourceLabel">Source text</label><textarea id="source" data-i18n-placeholder="sourcePlaceholder" placeholder="Paste settings or notes. Fields without a supported value will stay unchanged." rows="6" maxlength="12000"></textarea>
 <div class="source-actions"><button id="clipboard" class="secondary" data-i18n="clipboard">Read clipboard</button><button id="clear" class="text-button" data-i18n="clear">Clear text</button></div>
 <details id="settings"><summary data-i18n="keySettings">API key settings</summary><label for="api-key" data-i18n="keyLabel">TypeSafe API key</label><input id="api-key" type="password" autocomplete="off" spellcheck="false" data-i18n-placeholder="keyPlaceholder" placeholder="Enter your key only here">

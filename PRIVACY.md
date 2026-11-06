@@ -13,3 +13,11 @@ The clipboard is read only when you click **Read clipboard**. Source text and di
 Filled values are visible to the destination website. Its input/change handlers may send them to its server before you submit. The extension never submits forms automatically.
 
 There is no analytics or application backend. GitHub distributes the code and does not receive extension analysis requests. The local test server records submitted fictional data under `.local/form-fill-lab/receipts/` on your computer; that directory is excluded from Git.
+
+The macOS helper stores the registered vault and identity item identifiers, their titles and vault names for selection, and its configuration. Setup shows item metadata locally without reading contact values. In the review, only the selected registered identity is read with the CLI; a single registration is read automatically. Only supported identity fields, such as names, addresses and contact details, reach the review window. Notes and credentials are excluded. Matching and preview run locally. Only confirmed values are applied to the destination site. Values are excluded from AI requests, extension storage, diagnostics and Undo history. Legacy field registrations use saved field references and labels.
+
+After a 1Password fill, the extension blocks AI analysis of that document because the site could copy the value into field labels or headings.
+
+Before applying a fill, the review window temporarily keeps the retrieved fields and your edits. It can recheck destinations after you interact with the page without reading the vault again. Candidates and edits are cleared when you confirm the fill, and are also lost when the window closes.
+
+For read-only rechecks, the isolated page context keeps form element references and salted hashes until a new scan or page reload.
