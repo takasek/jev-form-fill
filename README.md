@@ -7,7 +7,7 @@
 
 A Chrome extension that matches your clipboard text to form fields with **TypeSafe Jev**. Review the proposed values, choose which fields to change, and fill them in page order. Fields without a supported value stay unchanged. Explicit blanks, checkboxes, radio buttons, and selects are supported. Undo restores the last fill. You submit the form yourself.
 
-**Preview v0.1.5 · Chrome 116+ · Use a TypeSafe API key for clipboard proposals. Local 1Password fills work without a key.** Creating proposals sends your source text and field metadata to TypeSafe; API charges may apply. Read the [privacy notes](PRIVACY.md).
+**Preview v0.1.6 · Chrome 116+ on HTTPS or a trusted local origin · Use a TypeSafe API key for clipboard proposals. Local 1Password fills work without a key.** Creating proposals sends your source text and field metadata to TypeSafe; API charges may apply. Read the [privacy notes](PRIVACY.md).
 
 ## See it in action
 
@@ -106,7 +106,7 @@ A packaged extension ZIP, when available, contains a `jev-form-fill` folder; loa
 
 The UI follows your browser language (English or Japanese). Use the **Language** selector to override it. Changing UI language does not translate your source text, field labels, or values.
 
-Failures appear **inside the popup**, with counts and a reason for each field. “The page did not accept the value” and “The page changed the value after filling” indicate failures. Closing the popup loses that display; no markers are added to the form. After applying, “0 proposals” means there are no unapplied proposals remaining.
+Failures appear **inside the popup**, with counts and a reason for each field. “The page did not accept the value” and “The page changed the value after filling” indicate failures. Closing the popup loses that display; no markers are added to the form. After applying, deselected fields are marked **Not selected**.
 
 When new fields appear after a selection, create proposals again. Fields edited manually or changed since analysis are skipped. Page navigation, reload, or extension reload clears plans and undo data.
 
@@ -122,6 +122,8 @@ Native `details` are opened for scanning and then restored. Open other collapsed
 
 For TypeSafe, readback checks run after writes and again 650ms after the entire fill. There is no ongoing monitor after that. Jev judgments can vary between runs, so always review the proposals and the final values. Model thresholds are application policy, not measured accuracy.
 
+The review shows the form and flags occupied fields. The support summary includes the build, operation and outcome codes without source text or form values. If an API request fails, the popup shows the batch, stage and number of requests. Retrying starts with the first batch. Cancel is available during analysis.
+
 ## Privacy, permissions, and cost
 
 Requests go directly to `https://api.typesafe.ai/v1/systemone`, using `jev-latest`. The source text, field names, headings, types, and options are sent. Existing field values, cookies, the page URL, and the full page body are not included in analysis requests. Names/headings themselves may contain personal information. There is no analytics or application backend.
@@ -132,7 +134,7 @@ Permissions: `activeTab`, `scripting`, `storage`, `clipboardRead`, the TypeSafe 
 
 ## Try the demo and run tests
 
-Development commands require the [source repository](https://github.com/takasek/jev-form-fill), not just the packaged extension ZIP. Run them at the repository root with Node.js 22+.
+Development commands require the [source repository](https://github.com/takasek/jev-form-fill), not just the packaged extension ZIP. Run them at the repository root with Node.js 22.12+.
 
 ```sh
 npm ci --ignore-scripts
@@ -144,7 +146,7 @@ Open the printed URL in Chrome. The lab binds only to `127.0.0.1` and saves fict
 
 In one real Chrome/API run of v0.1.3, normal inputs matched **28/28** and protected fields remained correct **18/18**. Stress tests matched **1/8**, with unsupported cases documented. A second analysis filled the dynamic dietary field and displayed both page-rejection failures; that second run was not fully graded. This is a fixture result, not a claim of compatibility with every website. The live GitHub App creation page is unverified.
 
-Tests use mocked model answers/Chrome APIs and jsdom; they do not call TypeSafe. Build the distribution ZIP with Python 3.9+:
+The Node suite uses jsdom and mocked Chrome APIs. The packaged smoke test runs the toolbar popup in Chrome for Testing. Both use synthetic model responses. Build the distribution ZIP with Python 3.9+:
 
 ```sh
 python3 -m unittest discover -s scripts -p 'test_*.py'
