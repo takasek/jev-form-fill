@@ -15,9 +15,19 @@ export const expected=[
   row('s14','ネイティブ要素がない独自選択UI','Custom blue','stress'),row('s15','ページ内の誘導文付きNotification email','notify+correct@example.test','stress'),row('s16','maxlengthが短すぎるLong title','This title intentionally exceeds twelve characters.','stress'),
   row('s17','iframe内のFrame nickname','FRAME-REQUESTED','stress'),row('s18','shadow DOM内のShadow nickname','SHADOW-REQUESTED','stress')
 ];
-export function grade(fields={}) {
+export function grade(fields={},submitted) {
   if (!fields || typeof fields!=='object' || Array.isArray(fields)) throw new Error('fields must be an object');
-  const rows=expected.map(item=>({...item,actual:Object.hasOwn(fields,item.name)?fields[item.name]:null,present:Object.hasOwn(fields,item.name),ok:Object.hasOwn(fields,item.name)&&JSON.stringify(fields[item.name])===JSON.stringify(item.value)}));
+  const rows=expected.map(item=>{
+    const present=Object.hasOwn(fields,item.name);
+    const actual=present ? fields[item.name] : null;
+    const domOk=present && JSON.stringify(actual)===JSON.stringify(item.value);
+    if (item.group!=='baseline') return {...item,actual,present,domOk,ok:domOk};
+    const values=submitted?.filter(([name])=>name===item.name).map(([,value])=>value);
+    // This fixture's checked checkboxes submit the native default "on"; unchecked ones omit the key.
+    const expectedValues=item.value===false ? [] : [item.value===true ? 'on' : item.value];
+    const submissionOk=values ? JSON.stringify(values)===JSON.stringify(expectedValues) : null;
+    return {...item,actual,present,domOk,submissionOk,submitted:values,ok:domOk && submissionOk===true};
+  });
   const summary=group=>{const selected=rows.filter(x=>x.group===group);return {passed:selected.filter(x=>x.ok).length,total:selected.length};};
   return {baseline:summary('baseline'),protection:summary('protection'),stress:summary('stress'),rows};
 }

@@ -53,6 +53,14 @@ export function pageCommand(request) {
     for(let parent=element.parentElement;parent&&parent!==form;parent=parent.parentElement)if(parent.matches('section,article'))scopes.unshift(parent);
     scopes.unshift(form);
     const headings=[];
+    if (element.form && !request.privateFill) {
+      const owner=element.form;
+      const namedBy=(owner.getAttribute('aria-labelledby') || '').split(/\s+/)
+        .map(id=>doc.getElementById(id)?.textContent).filter(Boolean).join(' ');
+      const caption=clean(namedBy || owner.getAttribute('aria-label') || owner.getAttribute('name') || owner.title);
+      if (doc.forms.length>1) headings.push(`#${Array.from(doc.forms).indexOf(owner)+1}`);
+      if (caption) headings.push(caption);
+    }
     for(const scope of scopes) {
       const outline=[];
       for(const heading of scope.querySelectorAll('h1,h2,h3,h4,h5,h6')) {
@@ -119,7 +127,8 @@ export function pageCommand(request) {
   }
   function allowed(element) {
     if (!visible(element) || element.matches(':disabled') || element.readOnly) return false;
-    if (element.tagName==='SELECT' && element.multiple) return false;
+    if (element.tagName==='SELECT' && (element.multiple ||
+        new Set(Array.from(element.options,option=>option.value)).size!==element.options.length)) return false;
     if (element.tagName==='INPUT' && !['text','email','tel','url','search','number','date','time','datetime-local','checkbox','radio'].includes(element.type)) return false;
     const identity=[label(element),element.name,element.id,element.autocomplete].join(' ');
     if (element.matches('input[type=checkbox],input[type=radio],select')) return true;
@@ -131,7 +140,8 @@ export function pageCommand(request) {
     return entry.elements[0].value;
   }
   function occupied(entry) {
-    if (value(entry)==='') return false;
+    const existing=value(entry);
+    if (existing==='' || existing===null || existing===false) return false;
     if (entry.kind!=='select') return true;
     const option=entry.elements[0].selectedOptions[0];
     return !/^(?:選んでください|選択してください|未選択|please select|select an option)$/i.test(clean(option?.textContent));
@@ -178,7 +188,8 @@ export function pageCommand(request) {
         if (!elements.every(allowed)) {elements.forEach(x=>seen.add(x));continue;}
       }
       elements.forEach(x=>seen.add(x));
-      const entry={kind,elements};
+      const entry={kind,elements,owner:element.form};
+      if (!request.privateFill) entry.name=element.name;
       const descriptor=describe(entry,`f${entries.length}`);
       if (!descriptor.label || descriptor.options?.length>254 || descriptor.options?.length===0 || new Set(descriptor.options?.map(x=>x.value)).size!== (descriptor.options?.length || 0)) continue;
       entry.descriptor=descriptor;entry.before=request.privateFill ? snapshot(value(entry),token) : value(entry);entry.fingerprint=JSON.stringify(descriptor);
@@ -191,13 +202,38 @@ export function pageCommand(request) {
     for (const element of entry.elements) for(let p=element.parentElement;p;p=p.parentElement) if(p.tagName==='DETAILS' && !p.open) {p.open=true;opened.push(p);}
     return opened;
   }
-  function current(entry, expectedFingerprint=entry.fingerprint) {
+  function destinationIssue(entry) {
+    if (entry.elements.some(el=>!el.isConnected)) return 'removed';
+    if (entry.elements.some(el=>el.form!==entry.owner)) return 'form_changed';
+    if (entry.elements.some(el=>el.matches(':disabled'))) return 'disabled';
+    if (entry.name!==undefined && entry.elements[0].name!==entry.name) return 'field_changed';
     const first=entry.elements[0];
     if (entry.kind==='radio' && first.name) {
       const members=Array.from(doc.querySelectorAll('input[type=radio]')).filter(x=>x.name===first.name && x.form===first.form);
-      if (members.length!==entry.elements.length || members.some((x,i)=>x!==entry.elements[i])) return false;
+      if (members.length!==entry.elements.length || members.some((x,i)=>x!==entry.elements[i])) return 'field_changed';
     }
-    return entry.elements.every(allowed) && JSON.stringify(describe(entry,entry.descriptor.id))===expectedFingerprint;
+    return entry.elements.every(allowed) ? null : 'field_changed';
+  }
+  function current(entry, expectedFingerprint=entry.fingerprint) {
+    return !destinationIssue(entry) && JSON.stringify(describe(entry,entry.descriptor.id))===expectedFingerprint;
+  }
+  function readbackTarget(entry) {
+    const opened=reveal(entry);
+    try {
+      const option=entry.kind==='select' && entry.elements[0].selectedOptions[0];
+      const issue=destinationIssue(entry) || (option && (option.disabled || option.closest('optgroup[disabled]')) ? 'option_disabled' : null);
+      return {issue, signature:issue ? null : JSON.stringify(describe(entry,entry.descriptor.id))};
+    } finally {opened.reverse().forEach(el=>{el.open=false;});}
+  }
+  function targetFailure(code) {
+    const reasons={
+      removed:'入力欄が削除されました。',
+      form_changed:'入力先のフォームが変わりました。',
+      disabled:'入力欄が無効になり、送信対象から外れました。',
+      option_disabled:'選択中の項目が無効になり、送信対象から外れました。',
+      field_changed:'ページの項目または値が変わりました。'
+    };
+    return {code,reason:reasons[code]};
   }
   function setter(element,property,newValue) {
     const prototype=element.tagName==='TEXTAREA'?HTMLTextAreaElement.prototype:element.tagName==='SELECT'?HTMLSelectElement.prototype:HTMLInputElement.prototype;
@@ -234,12 +270,13 @@ export function pageCommand(request) {
   if (request.op==='scan') {
     const previous=globalThis[key];
     if (previous?.privatePage && !request.privateFill) return {privatePage:true};
-    if (previous?.busy) throw new Error('入力処理中です。');
+    if (previous?.busy) return {error:'page_busy'};
+    if (typeof crypto.randomUUID!=='function' || (request.privateFill && !crypto.subtle)) return {error:'insecure_context'};
     const opened=openedForScan();
     try {
       const token=crypto.randomUUID();
       const entries=collect(token);
-      if (entries.length>160) throw new Error('160項目を超えています。対象フォームを分けてください。');
+      if (entries.length>160) return {error:'field_limit',fieldsFound:entries.length};
       const previousEntries=request.previousToken && previous?.token===request.previousToken ? previous.entries :
         request.previousToken && previous?.receipt?.token===request.previousToken ? previous.receipt.items.map(item=>item.entry) : [];
       const fields=entries.map(entry=>request.privateFill
@@ -265,7 +302,8 @@ export function pageCommand(request) {
           doc.addEventListener(event,invalidate,{capture:true,signal:state.listener.signal});
         }
       }
-      return {token,url:location.origin+location.pathname,title:doc.title,fields,unsupported:doc.querySelectorAll('[role=combobox]:not(select),[role=listbox]:not(select),iframe').length};
+      const occupiedIds=request.privateFill ? undefined : entries.filter(occupied).map(e=>e.descriptor.id);
+      return {token,occupiedIds,url:location.origin+location.pathname,title:doc.title,fields,unsupported:doc.querySelectorAll('[role=combobox]:not(select),[role=listbox]:not(select),iframe').length};
     } finally {opened.reverse().forEach(x=>{x.open=false;});}
   }
   if (request.op==='inspect') {
@@ -314,13 +352,16 @@ export function pageCommand(request) {
           if (!item.result) return actual===await item.before ? null :
             {id:item.id,status:'indirect',reason:'この欄への直接入力は行っていませんが、値または欄が変わりました。'};
           const result=item.result;
-          if (result.status==='confirmation') return result;
-          if (actual===await item.expected && result.status!=='stale' &&
-              await snapshot(JSON.stringify(describe(item.entry,item.id)),receipt.token)===await item.entry.fingerprint) {
-            return {...result,status:result.wrote?'filled':'matched',reason:result.wrote?'入力して読戻しを確認しました。':'現在の値が候補と一致しています。'};
+          if (result.status==='confirmation' || result.status==='stale') return {...result,valueMatches:actual===await item.expected};
+          const target=readbackTarget(item.entry);
+          const valueMatches=actual===await item.expected;
+          if (target.issue) return {...result,status:'changed',valueMatches,...targetFailure(target.issue)};
+          if (valueMatches &&
+              await snapshot(target.signature,receipt.token)===await item.entry.fingerprint) {
+            return {...result,status:result.wrote?'filled':'matched',code:'match',valueMatches,reason:result.wrote?'入力して読戻しを確認しました。':'現在の値が候補と一致しています。'};
           }
-          if (result.status==='skip' || result.status==='stale') return result;
-          return {id:item.id,wrote:!!result.wrote,status:'changed',reason:'読戻し時点で候補と異なる値、または別の欄になっています。'};
+          if (result.status==='skip') return {...result,valueMatches};
+          return {id:item.id,wrote:!!result.wrote,status:'changed',valueMatches,code:valueMatches?'field_changed':'value_changed',reason:'読戻し時点で候補と異なる値、または別の欄になっています。'};
         }));
         const known=new Set(receipt.items.map(i=>i.node));
         const added=Array.from(doc.querySelectorAll('input,select,textarea')).some(el=>
@@ -353,6 +394,8 @@ export function pageCommand(request) {
           if (state.privatePlan && !sameTarget(state.guards)) {
             results.push({id:row.id,status:'stale',reason:'元のフォームで操作または選択の変更がありました。フォームを読み直してください。'});continue;
           }
+          const issue=destinationIssue(entry);
+          if (issue) {results.push({id:row.id,status:'skip',...targetFailure(issue)});continue;}
           if (state.privatePlan && row.matchExisting) {
             const peer=state.entries.find(other=>other.descriptor.id===row.matchExisting);
             if (!peer || !peer.elements[0].isConnected || value(peer)!==row.value) {
@@ -364,12 +407,16 @@ export function pageCommand(request) {
               await snapshot(fingerprint,state.token)===await entry.fingerprint && value(entry)===before) {
             results.push({id:row.id,status:'matched',reason:'この欄に書き込む前に候補と一致していました。'});continue;
           }
-          if (!matches || value(entry)!==before || state.url!==location.href || !current(entry,fingerprint)) {results.push({id:row.id,status:'skip',reason:'ページの項目または値が変わりました。'});continue;}
+          if (!matches || value(entry)!==before || state.url!==location.href || !current(entry,fingerprint)) {
+            const sameValue=state.privatePlan ? await snapshot(value(entry),state.token)===await entry.before : value(entry)===entry.before;
+            results.push({id:row.id,status:'skip',code:sameValue?'field_changed':'prior_edit',reason:'ページの項目または値が変わりました。'});
+            continue;
+          }
           if (state.privatePlan && occupied(entry) && row.overwrite !== true) {
-            results.push({id:row.id,status:'skip',reason:'入力済みの値を保持しました。'});continue;
+            results.push({id:row.id,status:'skip',code:'occupied',reason:'入力済みの値を保持しました。'});continue;
           }
           if (value(entry)===row.value) {results.push({id:row.id,status:'unchanged',reason:'すでに同じ値です。'});continue;}
-          if (!write(entry,row.value)) {results.push({id:row.id,status:'skip',reason:'この値は項目に設定できません。'});continue;}
+          if (!write(entry,row.value)) {results.push({id:row.id,status:'skip',code:'invalid_value',reason:'この値は項目に設定できません。'});continue;}
           const after=value(entry);
           if (state.privatePlan && entry.kind==='select' && after===row.value) {
             const guard=state.guards.find(g=>g.node===entry.elements[0]);
@@ -378,7 +425,7 @@ export function pageCommand(request) {
           if (!request.privateFill && after!==before) undo.push({entry,before,after});
           await settle();await settle();
           const retained=value(entry)===row.value;
-          results.push({id:row.id,...(state.privatePlan ? {wrote:true} : {}),status:retained?'filled':'failed',reason:retained?'入力して読戻しを確認しました。':'ページが値を受け付けませんでした。'});
+          results.push({id:row.id,wrote:true,code:retained?'match':'rejected',status:retained?'filled':'failed',reason:retained?'入力して読戻しを確認しました。':'ページが値を受け付けませんでした。'});
         } catch {results.push({id:row.id,status:'failed',reason:'この項目の入力に失敗しました。'});}
         finally {
           if (state.privatePlan) state.progress.completed++;
@@ -402,13 +449,22 @@ export function pageCommand(request) {
         }
         return await readReceipt(receipt);
       }
-      if(results.some(x=>x.status==='filled')) {
+      if (results.some(row=>row.wrote || row.status==='unchanged')) {
         await new Promise(resolve=>setTimeout(resolve,650));
-        for(const result of results.filter(x=>x.status==='filled')) {
-          const entry=state.entries.find(x=>x.descriptor.id===result.id);
-          if(!entry.elements.every(x=>x.isConnected)||value(entry)!==rows.get(result.id).value) {
-            result.status='failed';result.reason='入力後にページが値を変更しました。';
-          }
+      }
+      for (const result of results) {
+        const entry=state.entries.find(e=>e.descriptor.id===result.id);
+        result.wrote=!!result.wrote;
+        result.valueMatches=entry.elements.every(el=>el.isConnected) && value(entry)===rows.get(result.id).value;
+        if (!result.wrote && result.status!=='unchanged') continue;
+        const target=readbackTarget(entry);
+        const issue=target.issue || (state.url!==location.href || target.signature!==entry.fingerprint ? 'field_changed' : null);
+        if (issue) Object.assign(result,{status:'failed'},targetFailure(issue));
+        else if (result.valueMatches) {
+          result.code='match';
+          if (result.wrote) Object.assign(result,{status:'filled',reason:'入力して読戻しを確認しました。'});
+        } else if (result.code!=='rejected') {
+          Object.assign(result,{status:'failed',code:'value_changed',reason:'入力後にページが値を変更しました。'});
         }
       }
       state.token=null;

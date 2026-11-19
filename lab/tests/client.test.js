@@ -15,7 +15,7 @@ test('submission observes a delayed page rejection before grading',async()=>{
   const received=new Promise(resolve=>{window.fetch=async(url,options)=>{
     if(url==='/source.txt')return {ok:true,text:async()=> 'Test source'};
     receipt=JSON.parse(options.body);resolve();
-    return {ok:true,json:async()=>({id:'test',receivedAt:new Date().toISOString(),grade:grade(receipt.fields)})};
+    return {ok:true,json:async()=>({id:'test',receivedAt:new Date().toISOString(),grade:grade(receipt.fields,receipt.submitted)})};
   };});
   try{
     window.eval(script);
@@ -26,7 +26,7 @@ test('submission observes a delayed page rejection before grading',async()=>{
     await received;
     await new Promise(resolve=>setImmediate(resolve));
     assert.equal(receipt.fields.s13,'DELAYED-BY-SITE');
-    assert.equal(grade(receipt.fields).rows.find(row=>row.name==='s13').ok,false);
+    assert.equal(grade(receipt.fields,receipt.submitted).rows.find(row=>row.name==='s13').ok,false);
     assert.equal(alias.value,receipt.fields.s13);
   }finally{window.close();}
 });

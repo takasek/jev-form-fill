@@ -30,8 +30,13 @@ export async function createLabServer({dataDir}={}){
         if(!/^application\/json(?:;|$)/i.test(request.headers['content-type']||'')){json(response,415,{error:'JSON required'});return;}
         const input=await body(request);
         if(!validFields(input.fields)||typeof input.runId!=='string'||!/^[a-f0-9-]{36}$/.test(input.runId)){json(response,400,{error:'Invalid test result'});return;}
+        const submitted=input.submitted;
+        if (submitted!==undefined && (!Array.isArray(submitted) || submitted.length>160 ||
+            !submitted.every(pair=>Array.isArray(pair) && pair.length===2 && pair.every(v=>typeof v==='string')))) {
+          json(response,400,{error:'Invalid submitted fields'});return;
+        }
         const receivedAt=new Date().toISOString(),id=randomUUID();
-        const result={id,runId:input.runId,receivedAt,grade:grade(input.fields),fields:input.fields,submitted:Array.isArray(input.submitted)?input.submitted.slice(0,160):[],events:Array.isArray(input.events)?input.events.slice(0,300):[]};
+        const result={id,runId:input.runId,receivedAt,gradingVersion:2,grade:grade(input.fields,submitted),fields:input.fields,submitted,events:Array.isArray(input.events)?input.events.slice(0,300):[]};
         const file=`${receivedAt.replace(/:/g,'-')}-${id}.json`;
         await writeFile(path.join(dir,file),JSON.stringify(result,null,2),{flag:'wx'});
         console.log(JSON.stringify({type:'receipt',id,runId:input.runId,receivedAt,baseline:result.grade.baseline,protection:result.grade.protection,stress:result.grade.stress}));

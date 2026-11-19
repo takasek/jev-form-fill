@@ -8,7 +8,7 @@ Existing field values, cookies, the destination page URL, and the full page body
 
 Your API key normally stays in the open popup. Choosing **Save the key in this browser** and applying settings saves it in `chrome.storage.local`. Chrome sync is not used, and content-script access is disabled. This storage is not an OS credential vault. **Delete saved key** removes it. The UI language preference is also stored locally; selecting a language never saves the API key.
 
-The clipboard is read only when you click **Read clipboard**. Source text and diagnostics are not persisted. Diagnostics contain source text and decisions; review them before sharing in a public issue. Plans and undo values are kept in the extension’s isolated world on the page and disappear on page reload or navigation.
+The clipboard is read only when you click **Read clipboard**. Source text and diagnostics are not persisted. The support summary contains build information, counts and outcome codes. It omits URLs, field names, source text, values and hashes. The separate decision details contain source text and decisions; review them before sharing in a public issue. Plans and undo values are kept in the extension’s isolated world on the page and disappear on page reload or navigation.
 
 Filled values are visible to the destination website. Its input/change handlers may send them to its server before you submit. The extension never submits forms automatically.
 

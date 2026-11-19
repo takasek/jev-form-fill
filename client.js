@@ -7,7 +7,7 @@ export async function callJev(body,key,{signal,fetcher=fetch}={}) {
   });
   if (!response.ok) {
     const messages={401:'APIキーが無効です。',403:'APIを利用する権限がありません。',422:'APIが要求形式を受け付けませんでした。',429:'APIの利用上限に達しました。しばらく待ってやり直してください。',529:'APIが混雑しています。しばらく待ってやり直してください。'};
-    throw new Error(messages[response.status] || `APIエラー (${response.status})`);
+    throw Object.assign(new Error(messages[response.status] || `APIエラー (${response.status})`),{httpStatus:response.status});
   }
   const result=await response.json();
   if (!result || typeof result.answers!=='object' || result.answers===null || Array.isArray(result.answers)) throw new Error('APIから有効な回答が返りませんでした。');

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.6 (build 20261119.1)
+
+- Identify the reviewed form, flag occupied fields and verify previously matching fields as well as writes. Report a moved or disabled destination.
+- Distinguish unselected proposals, scan failures and interrupted batches. Both review windows provide a local, value-free support summary.
+- Grade ordinary lab fields against the submitted form data as well as their final on-page values.
+- The November 1Password integration and fixed extension ID first appeared on main while the version still read 0.1.5.
+
 ## 0.1.5
 
 - English and Japanese UI, following the browser language with an explicit override.

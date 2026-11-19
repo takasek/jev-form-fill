@@ -2,6 +2,12 @@
 
 English · [日本語](validation.ja.md)
 
+## 0.1.6 regression checks
+
+The package smoke test opens the installed toolbar action in Chrome with a local form and deterministic model responses. It checks the selected fields against native FormData and exercises the private page adapter with synthetic values. Run `npm run package` and then `CHROME_BINARY=/path/to/chrome npm run test:chrome`. CI runs this test after packaging with the runner’s installed Google Chrome. Lab receipts with `gradingVersion: 2` score ordinary fields against both DOM state and submitted data.
+
+## Historical trials
+
 As of 2026-10-04. Version 0.1.5 adds English/Japanese UI and public documentation. The form analysis and application code is unchanged from 0.1.3.
 
 ## Real Chrome/API trial

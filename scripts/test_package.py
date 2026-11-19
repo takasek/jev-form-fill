@@ -62,8 +62,9 @@ class PackageTests(unittest.TestCase):
                 self.assertEqual(set(z.namelist()), {'jev-form-fill/' + name for name in package.FILES})
                 for name in package.FILES:
                     self.assertEqual(z.read('jev-form-fill/' + name), (ROOT / name).read_bytes())
-                self.assertEqual(json.loads(z.read('jev-form-fill/manifest.json'))['version'], '0.1.5')
                 manifest = json.loads(z.read('jev-form-fill/manifest.json'))
+                self.assertEqual(manifest['version'], json.loads((ROOT/'package.json').read_text())['version'])
+                self.assertRegex(manifest['version_name'], re.escape(manifest['version']) + r' \(build [0-9.]+\)$')
                 self.assertEqual(manifest['default_locale'], 'en')
                 for locale in ('en', 'ja'):
                     messages = json.loads(z.read('jev-form-fill/_locales/' + locale + '/messages.json'))
