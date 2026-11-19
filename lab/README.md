@@ -25,7 +25,7 @@ The adversarial fixture uses Japanese and English labels. The server listens onl
 - Misleading page instructions, immediate/delayed input rejection, and length constraints.
 - Custom comboboxes, iframe, and shadow DOM test current limitations. A perfect stress score is not required for ordinary input success.
 
-Grading checks the submitted state, not who filled it, popup warnings, or Undo. Receipts include ordinary form data, excluded-field preservation, and input/change events. Analyzing the form sends source text and field metadata to TypeSafe. This fixture does not register with a real service.
+Ordinary fields must match both the DOM and submitted form data. Unchecked checkboxes must be absent from the submission. Protection and stress cases use the DOM snapshot. Historical receipts retain the scores recorded at the time. Receipts include ordinary form data, excluded-field preservation, and input/change events. Analyzing the form sends source text and field metadata to TypeSafe. This fixture does not register with a real service.
 
 ## Tests
 

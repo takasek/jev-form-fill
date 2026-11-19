@@ -40,9 +40,9 @@ function renderResult(result){
   const receipt=document.createElement('p');receipt.className='note';receipt.textContent=`受信ID: ${result.id} · ${new Date(result.receivedAt).toLocaleString('ja-JP')}`;section.append(receipt);
   const scores=document.createElement('div');scores.className='scores';
   for(const [key,label] of [['baseline','通常入力'],['protection','変更しない項目の保護'],['stress','追加の負荷試験']]){const box=document.createElement('div');box.className='score';const strong=document.createElement('strong');strong.textContent=`${result.grade[key].passed} / ${result.grade[key].total}`;const span=document.createElement('span');span.textContent=label;box.append(strong,span);scores.append(box);}section.append(scores);
-  const note=document.createElement('p');note.className='note';note.textContent='負荷試験には未対応UIも含みます。フォームの値を採点しており、拡張が出した警告の正しさや、誰が値を入力したかまでは判定しません。';section.append(note);
-  const table=document.createElement('table');const head=document.createElement('tr');for(const title of ['判定','項目','期待値','受信値']){const th=document.createElement('th');th.textContent=title;head.append(th);}table.append(head);
-  for(const item of result.grade.rows){const row=document.createElement('tr');textCell(row,item.ok?'✓ 一致':'× 不一致',item.ok?'ok':'bad');textCell(row,item.label);textCell(row,item.value,'value');textCell(row,item.present?item.actual:'（項目なし）','value');table.append(row);}section.append(table);
+  const note=document.createElement('p');note.className='note';note.textContent='通常入力は画面の値と送信データの両方を採点します。保護項目と負荷試験は画面の値を確認します。';section.append(note);
+  const table=document.createElement('table');const head=document.createElement('tr');for(const title of ['判定','項目','期待値','画面の値','送信データ']){const th=document.createElement('th');th.textContent=title;head.append(th);}table.append(head);
+  for(const item of result.grade.rows){const row=document.createElement('tr');textCell(row,item.ok?'✓ 一致':'× 不一致',item.ok?'ok':'bad');textCell(row,item.label);textCell(row,item.value,'value');textCell(row,item.present?item.actual:'（項目なし）','value');textCell(row,item.group!=='baseline'?'—':item.submissionOk===null?'未取得':item.submitted?.length?item.submitted:'（項目なし）','value');table.append(row);}section.append(table);
   section.scrollIntoView({behavior:'smooth',block:'start'});
 }
 $('test-form').addEventListener('submit',async event=>{
