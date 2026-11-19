@@ -4,20 +4,17 @@ import {readFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import {evaluate} from '../core.js';
 import {pageCommand} from '../page.js';
-import {resolveLanguage,translator,localizeMessage} from '../i18n.js';
+import {startPopup} from '../popup.js';
 const require=createRequire(import.meta.url);
 const {JSDOM}=require(process.env.JEV_TEST_DEPS || 'jsdom');
 const html=await readFile(new URL('../popup.html',import.meta.url),'utf8');
-const script=(await readFile(new URL('../popup.js',import.meta.url),'utf8')).replace(/^import .*;\n/gm,'');
 const waitFor=async condition=>{for(let i=0;i<200;i++){if(condition()) return;await new Promise(r=>setTimeout(r,10));}throw new Error('UI did not settle');};
 function popup({evaluateFn=evaluate,call=async()=>({answers:{}}),pageFn=()=>({token:'t',fields:[{id:'f0',kind:'checkbox',label:'Active'}]}),uiLanguage='ja',initialSaved={}}={}) {
   const dom=new JSDOM(html,{url:'https://extension.test/popup.html',runScripts:'outside-only'});
   const win=dom.window;
   let saved={...initialSaved};
-  win.evaluate=evaluateFn;win.pageCommand=pageCommand;win.callJev=call;win.AbortController=AbortController;
-  win.resolveLanguage=resolveLanguage;win.translator=translator;win.localizeMessage=localizeMessage;
   win.chrome={i18n:{getUILanguage:()=>uiLanguage},storage:{local:{setAccessLevel:async()=>{},get:async()=>saved,set:async x=>{saved={...saved,...x};},remove:async key=>{delete saved[key];}}},tabs:{query:async()=>[{id:1,url:'https://example.com/form'}]},scripting:{executeScript:async x=>[{result:await pageFn(x.args[0])}]}};
-  win.eval(script);
+  startPopup(win.document, win.chrome, {evaluateFields:evaluateFn, requestApi:call});
   return {dom,win,$:id=>win.document.getElementById(id),saved:()=>saved};
 }
 test('editing source during an in-flight analysis cannot revive stale candidates', async()=>{
