@@ -6,8 +6,8 @@ import {tmpdir} from 'node:os';
 import {join,resolve} from 'node:path';
 import puppeteer from 'puppeteer-core';
 
-const executablePath=process.env.CHROME_FOR_TESTING;
-if (!executablePath) throw new Error('Set CHROME_FOR_TESTING to the Chrome for Testing executable.');
+const executablePath=process.env.CHROME_BINARY;
+if (!executablePath) throw new Error('Set CHROME_BINARY to a Chrome executable with extension automation support.');
 const directory=await mkdtemp(join(tmpdir(),'jev-chrome-'));
 const fixture=`<!doctype html><title>Registration</title>
   <form id="buyer" aria-label="Buyer"><label>Email<input name="keep" value="existing"></label>
@@ -20,7 +20,7 @@ try {
   execFileSync('python3',['-m','zipfile','-e',resolve('dist/jev-form-fill.zip'),directory]);
   await new Promise((done,reject)=>server.once('error',reject).listen(0,'127.0.0.1',done));
   browser=await puppeteer.launch({
-    executablePath,pipe:true,enableExtensions:true,
+    executablePath,pipe:true,enableExtensions:true,dumpio:process.env.CI==='true',
     args:['--disable-background-networking','--proxy-server=http://127.0.0.1:1','--proxy-bypass-list=127.0.0.1']
   });
   const id=await browser.installExtension(join(directory,'jev-form-fill'));

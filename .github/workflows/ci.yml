@@ -21,6 +21,6 @@ jobs:
       - run: python3 -m unittest discover -s scripts -p 'test_*.py'
       - run: npm run package
       - name: Test the packaged extension in Chrome
-        run: |
-          chrome_path=$(npm exec --offline -- browsers install chrome@149.0.7827.22 --path "$RUNNER_TEMP/jev-browser" --format '{{path}}')
-          CHROME_FOR_TESTING="$chrome_path" npm run test:chrome
+        env:
+          CHROME_BINARY: /usr/bin/google-chrome
+        run: npm run test:chrome

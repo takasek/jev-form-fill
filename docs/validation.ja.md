@@ -4,7 +4,7 @@
 
 ## 0.1.6 の回帰試験
 
-配布ZIPを Chrome for Testing に読み込み、ツールバーから拡張を開きます。ローカルの架空フォームと固定のモデル回答を使い、選択した欄と実際の FormData を照合します。1Password のページ側の入力・再確認にも架空値を使います。`npm run package` の後に `CHROME_FOR_TESTING=/path/to/chrome npm run test:chrome` で実行できます。CI でもZIP作成後に実行します。lab の受信記録に `gradingVersion: 2` がある場合、通常欄はDOMの値と送信データの両方で採点しています。
+配布ZIPを Chrome に読み込み、ツールバーから拡張を開きます。ローカルの架空フォームと固定のモデル回答を使い、選択した欄と実際の FormData を照合します。1Password のページ側の入力・再確認にも架空値を使います。`npm run package` の後に `CHROME_BINARY=/path/to/chrome npm run test:chrome` で実行できます。CI ではランナーにインストールされた Google Chrome でZIP作成後に実行します。lab の受信記録に `gradingVersion: 2` がある場合、通常欄はDOMの値と送信データの両方で採点しています。
 
 ## 過去の実測
 
