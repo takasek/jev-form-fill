@@ -13,7 +13,7 @@ function popup({evaluateFn=evaluate,call=async()=>({answers:{}}),pageFn=()=>({to
   const dom=new JSDOM(html,{url:'https://extension.test/popup.html',runScripts:'outside-only'});
   const win=dom.window;
   let saved={...initialSaved};
-  win.chrome={i18n:{getUILanguage:()=>uiLanguage},storage:{local:{setAccessLevel:async()=>{},get:async()=>saved,set:async x=>{saved={...saved,...x};},remove:async key=>{delete saved[key];}}},tabs:{query:async()=>[{id:1,url:'https://example.com/form'}]},scripting:{executeScript:async x=>[{result:await pageFn(x.args[0])}]}};
+  win.chrome={runtime:{getManifest:()=>({version:'0.1.6',version_name:'test-build'})},i18n:{getUILanguage:()=>uiLanguage},storage:{local:{setAccessLevel:async()=>{},get:async()=>saved,set:async x=>{saved={...saved,...x};},remove:async key=>{delete saved[key];}}},tabs:{query:async()=>[{id:1,url:'https://example.com/form'}]},scripting:{executeScript:async x=>[{result:await pageFn(x.args[0])}]}};
   startPopup(win.document, win.chrome, {evaluateFields:evaluateFn, requestApi:call});
   return {dom,win,$:id=>win.document.getElementById(id),saved:()=>saved};
 }
@@ -104,4 +104,58 @@ test('an empty undo history explains how to correct a private fill',async()=>{
   await waitFor(()=>ui.$('target').textContent.includes('example.com'));
   ui.$('undo').click();await waitFor(()=>!ui.$('undo').disabled);
   assert.match(ui.$('status').textContent,/1Password/);
+});
+
+test('mixed selection keeps an occupied field and reports both outcomes without disclosing inputs',async()=>{
+  const dom=new JSDOM('<form aria-label="Private caption"><label>First<input name=a value=secret-old></label><label>Second<input name=b></label></form>',{url:'https://example.test/',runScripts:'outside-only'});
+  dom.window.HTMLElement.prototype.getClientRects=()=>[{width:10,height:10}];
+  const command=dom.window.eval('('+pageCommand.toString()+')');
+  const ui=popup({pageFn:command,evaluateFn:async(source,fields)=>fields.map(field=>({field,id:field.id,status:'ready',value:source,display:source}))});
+  await waitFor(()=>ui.$('target').textContent.includes('example.com'));
+  ui.$('api-key').value='fake-api-key';ui.$('source').value='secret-new';ui.$('analyze').click();
+  await waitFor(()=>!ui.$('analyze').disabled);
+  assert.match(ui.$('rows').firstChild.textContent,/入力済み/);
+  ui.$('rows').querySelector('input').checked=false;
+  ui.$('apply').click();
+  assert.equal(ui.$('cancel').hidden,true);
+  await waitFor(()=>!ui.$('analyze').disabled);
+  assert.deepEqual(Array.from(dom.window.document.querySelectorAll('input'),el=>el.value),['secret-old','secret-new']);
+  assert.equal(ui.$('rows').querySelectorAll('input:checked').length,0);
+  assert.match(ui.$('rows').firstChild.textContent,/選択しなかった/);
+  const summary=JSON.parse(ui.$('support').value);
+  assert.equal(summary.build,'test-build');
+  assert.deepEqual(summary.rows.map(row=>row.selected),[false,true]);
+  assert.equal(summary.rows[1].wrote,true);
+  assert.doesNotMatch(ui.$('support').value,/secret-|fake-api|First|Second|Private caption|example\.test/);
+  dom.window.close();
+});
+
+test('a later batch failure reports only operational details and the cost of restarting',async()=>{
+  let calls=0;
+  const fields=Array.from({length:9},(_,i)=>({id:'f'+i,kind:'checkbox',label:'Private label'}));
+  const ui=popup({pageFn:()=>({token:'t',fields}),call:async body=>{
+    if(++calls===2) throw Object.assign(new Error('quota'),{httpStatus:429});
+    return {answers:Object.fromEntries(Object.entries(body.questions).map(([id,q])=>[id,{type:'choice',choice:'skip',confidence:1,probabilities:Object.fromEntries(Object.keys(q.criteria).map(k=>[k,Number(k==='skip')]))}]))};
+  }});
+  await waitFor(()=>ui.$('target').textContent.includes('example.com'));
+  ui.$('api-key').value='fake-key';ui.$('source').value='private source';ui.$('analyze').click();
+  await waitFor(()=>!ui.$('analyze').disabled);
+  const report=JSON.parse(ui.$('support').value);
+  assert.equal(report.batch,2);assert.equal(report.stage,'source');assert.equal(report.requests,2);
+  assert.equal(report.httpStatus,429);
+  assert.match(ui.$('status').textContent,/先頭から/);
+  assert.equal(ui.$('apply').disabled,true);
+  assert.doesNotMatch(ui.$('support').value,/private source|Private label|fake-key|example\.com/);
+});
+
+test('lost page during apply replaces successful analysis in the support summary',async()=>{
+  const field={id:'f0',kind:'text',label:'Private'};
+  const ui=popup({pageFn:r=>r.op==='scan'?{token:'t',fields:[field]}:undefined,
+    evaluateFn:async()=>[{id:'f0',field,value:'private',status:'ready'}]});
+  await waitFor(()=>ui.$('target').textContent.includes('example.com'));
+  ui.$('api-key').value='key';ui.$('source').value='private';ui.$('analyze').click();
+  await waitFor(()=>!ui.$('analyze').disabled);
+  ui.$('apply').click();await waitFor(()=>!ui.$('analyze').disabled);
+  const report=JSON.parse(ui.$('support').value);
+  assert.equal(report.operation,'apply');assert.equal(report.error,'no_access');
 });

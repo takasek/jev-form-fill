@@ -180,6 +180,16 @@ export const messages = {
     "en": "Choose the fields to change. Unchecked fields will be left alone.",
     "ja": "変更したい項目を選んでください。チェックを外した項目は触りません。"
   },
+  "supportTitle": {"en":"Support summary","ja":"問い合わせ用の要約"},
+  "supportHint": {"en":"Copy this summary to share counts and outcome codes without field names or values.","ja":"件数と処理結果をコピーできます。項目名と入力値は含みません。"},
+  "securePage": {"en":"Open the HTTPS version of the form. This page does not support secure review.","ja":"安全に確認するための機能を利用できません。フォームのHTTPS版を開いてください。"},
+  "occupiedHint": {"en":"Already filled","ja":"入力済み"},
+  "notSelected": {"en":"Not selected","ja":"選択しなかった項目"},
+  "batchFailure": {"en":"{message} Batch {batch} of {batches}, stage {stage}, requests made: {requests}. Retrying starts with the first batch.","ja":"{message} 全{batches}バッチ中{batch}番目、段階 {stage}、要求済み{requests}回。再試行は先頭からです。"},
+  "removedField": {"en":"The field was removed.","ja":"入力欄が削除されました。"},
+  "differentForm": {"en":"The field now belongs to another form.","ja":"入力先のフォームが変わりました。"},
+  "disabledOption": {"en":"The selected option is disabled and excluded from submission.","ja":"選択中の項目が無効になり、送信対象から外れました。"},
+  "disabledField": {"en":"The field is disabled and excluded from submission.","ja":"入力欄が無効になり、送信対象から外れました。"},
   "diagnostics": {
     "en": "Decision details (diagnostics)",
     "ja": "判定の詳細（診断用）"

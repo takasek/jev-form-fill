@@ -1,3 +1,4 @@
+import {scanErrorMessage,showSupport} from './support.js';
 import {translator, localizeMessage} from './i18n.js';
 import {reviewProfile} from './profile.js';
 import {pageCommand} from './page.js';
@@ -9,6 +10,7 @@ export async function startReview(doc, api, language) {
   doc.documentElement.lang = language;
   for (const node of doc.querySelectorAll('[data-i18n]')) node.textContent = t(node.dataset.i18n);
   function setupIssue(message) {
+    showSupport(doc,api.manifest,{name:'private_setup',error:message});
     get('status').textContent=t(message);
     get('setupHelp').hidden=false;
     get('setupHelp').open=message==='opSetup';
@@ -28,6 +30,11 @@ export async function startReview(doc, api, language) {
   let scan;
   try {
     scan = await api.scan();
+    if (scan.error) {
+      showSupport(doc,api.manifest,{name:'scan',error:scan.error,fieldsFound:scan.fieldsFound});
+      get('status').textContent=scanErrorMessage(scan.error,t);
+      return;
+    }
     get('target').textContent = scan.url;
     const targets = scan.fields.filter(field => ['text','select'].includes(field.kind));
     if (!targets.length) { get('status').textContent = t('opNoFields'); return; }
@@ -117,13 +124,20 @@ export async function startReview(doc, api, language) {
       if (textTargets.find(field=>field.id===row.id)?.occupied) row.overwrite = true;
       preview.textContent = '';
       try {
-        const [result] = await api.apply({op:'apply', privateFill:true, token:scan.token, rows:[row]});
-        get('status').textContent = localizeMessage(result.reason, language);
-      } catch { get('status').textContent = t('opPageError'); }
+        const results = await api.apply({op:'apply', privateFill:true, token:scan.token, rows:[row]});
+        showSupport(doc,api.manifest,{name:'private_apply',results:results.map(item=>({...item,selected:item.id===row.id}))});
+        get('status').textContent = localizeMessage(results[0].reason, language);
+      } catch {
+        showSupport(doc,api.manifest,{name:'private_apply',error:'no_access'});
+        get('status').textContent = t('opPageError');
+      }
     };
   } catch {
     if (scan) setupIssue('opSetup');
-    else get('status').textContent=t('opPageError');
+    else {
+      showSupport(doc,api.manifest,{name:'scan',error:'no_access'});
+      get('status').textContent=t('opPageError');
+    }
   }
 }
 
@@ -136,6 +150,7 @@ if (typeof chrome !== 'undefined' && chrome.scripting) {
   }
   startReview(document, {
     extensionId:chrome.runtime.id,
+    manifest:chrome.runtime.getManifest(),
     scan:options => command({op:'scan', privateFill:true,...options}),
     apply:command,
     inspect:token=>command({op:'inspect',privateFill:true,token}),

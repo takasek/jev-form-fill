@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
-FILES = ('manifest.json', 'popup.html', 'popup.css', 'popup.js', 'core.js',
+FILES = ('manifest.json', 'popup.html', 'popup.css', 'popup.js', 'core.js', 'support.js',
          'onepassword.html', 'onepassword.js', 'profile.js', 'profile-formats.js', 'native/host.py', 'native/install.py',
          'native/stage.py', 'page.js', 'client.js', 'i18n.js', '_locales/en/messages.json',
          '_locales/ja/messages.json', 'README.md', 'README.ja.md', 'PRIVACY.md', 'PRIVACY.ja.md', 'LICENSE',

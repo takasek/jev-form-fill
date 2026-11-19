@@ -1,3 +1,4 @@
+import {scanErrorMessage,showSupport} from './support.js';
 import {formatRole, derivedParts, formatPhone, joinedName, formatContactValue} from './profile-formats.js';
 // Only the local review page imports this module. A proposal selects a source by index.
 const rules = [
@@ -498,9 +499,15 @@ export function reviewProfile(doc, scan, targets, fields, api, t, localize, draf
       source:sourceKey(sources[Number(row.select.value)]),value:reviewedValue(row)}));
     try {
       const fresh=await api.scan({previousToken:scan.token});
+      if (fresh.error) {
+        showSupport(doc,api.manifest,{name:'scan',error:fresh.error,fieldsFound:fresh.fieldsFound});
+        status.textContent=scanErrorMessage(fresh.error,t);
+        return;
+      }
       reviewProfile(doc,fresh,fresh.fields.filter(field=>['text','select'].includes(field.kind)),fields,api,t,localize,saved);
     } catch {
       saved.length=0;
+      showSupport(doc,api.manifest,{name:'scan',error:'no_access'});
       status.textContent=t('opPageError');
     } finally {rescan.disabled=false;}
   }
@@ -530,6 +537,7 @@ export function reviewProfile(doc, scan, targets, fields, api, t, localize, draf
         if (info.stale) return;
       } catch {
         notice({stale:true});
+        showSupport(doc,api.manifest,{name:'private_apply',error:'no_access'});
         status.textContent=t('opPageError');
         return;
       } finally {checking=false;}
@@ -565,7 +573,13 @@ export function reviewProfile(doc, scan, targets, fields, api, t, localize, draf
     const total=writes.length;
     fill.hidden=true;
     doc.getElementById('reviewActions').append(status,verify,rescan);
-    function show(results) {
+    const selectedIds=new Set(writes.map(row=>row.id));
+    function show(results,operation) {
+      const supportRows=rows.map(({field})=>({
+        id:field.id,selected:selectedIds.has(field.id),status:'not_selected',
+        ...results.find(item=>item.id===field.id)
+      }));
+      showSupport(doc,api.manifest,{name:operation,results:supportRows.concat(results.filter(item=>!item.id))});
       for (const {field,preview} of rows) {
         const result=results.find(r=>r.id===field.id);
         preview.textContent=result ? localize(result.reason) : '';
@@ -582,18 +596,23 @@ export function reviewProfile(doc, scan, targets, fields, api, t, localize, draf
     }
     status.textContent=t('opWaitingReadback');
     try {
-      show(await api.apply({op:'apply', privateFill:true, token:scan.token, rows:writes}));
+      show(await api.apply({op:'apply', privateFill:true, token:scan.token, rows:writes}),'private_apply');
       if (api.verify) {
         verify.hidden=false;
         verify.onclick=async()=>{
           verify.disabled=true;
-          try { show(await api.verify(scan.token)); }
-          catch { status.textContent=t('opPageError'); }
+          try { show(await api.verify(scan.token),'private_verify'); }
+          catch {
+            showSupport(doc,api.manifest,{name:'private_verify',error:'no_access'});
+            status.textContent=t('opPageError');
+          }
           finally { verify.disabled=false; }
         };
       }
-    } catch { status.textContent=t('opPageError'); }
-    finally {
+    } catch {
+      showSupport(doc,api.manifest,{name:'private_apply',error:'no_access'});
+      status.textContent=t('opPageError');
+    } finally {
       stopWatching();
       writes=null;
       if (api.rescan) { rescan.hidden=false;rescan.textContent=t('opRescan');rescan.onclick=api.rescan; }

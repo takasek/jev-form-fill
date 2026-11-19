@@ -142,21 +142,25 @@ function verification(source,rows) {
   const questions=Object.fromEntries(proposals.map(proposal=>[proposal.id,{type:'noul',instructions:{policy:policies,proposal,question:'Does source explicitly support setting this exact destination field to this proposed value? False for missing or contradictory facts, labels copied as values, explanations copied as values, or wrong scope. For an empty string, require an explicit blank instruction. For false, require an explicit OFF instruction. Select values can be normalized to the equivalent listed option.'}}]));
   return {model:'jev-latest',state:{source,proposals},questions};
 }
-export async function evaluate(source,fields,request,progress=()=>{}) {
+export async function evaluate(source,fields,request,progress=()=>{},onRequest=()=>{}) {
   passages(source);
   if (!Array.isArray(fields) || fields.length>LIMITS.fields) throw new Error('対象は160項目以内です。フォームを分けてください。');
   const all=[];
   for (let offset=0;offset<fields.length;offset+=LIMITS.batch) {
     const batch=fields.slice(offset,offset+LIMITS.batch);
     progress(`${offset+1}〜${offset+batch.length} / ${fields.length} 項目を読み取っています…`);
+    const send=(stage,body)=>{
+      onRequest({stage,batch:1+offset/LIMITS.batch,batches:Math.ceil(fields.length/LIMITS.batch)});
+      return request(body);
+    };
     const stage=propose(source,batch);
-    const rows=stage.resolve(await request(stage.body));
+    const rows=stage.resolve(await send('source',stage.body));
     const values=selectValues(source,rows);
-    if(Object.keys(values.body.questions).length)values.resolve(await request(values.body));
+    if(Object.keys(values.body.questions).length)values.resolve(await send('value',values.body));
     const next=extraction(source,rows);
-    if (Object.keys(next.body.questions).length) next.resolve(await request(next.body));
+    if (Object.keys(next.body.questions).length) next.resolve(await send('extract',next.body));
     const verify=verification(source,rows);
-    const response=Object.keys(verify.questions).length ? await request(verify) : {};
+    const response=Object.keys(verify.questions).length ? await send('verification',verify) : {};
     for (const row of rows) {
       if (row.status==='verify') {
         const answer=response?.answers?.[row.id];

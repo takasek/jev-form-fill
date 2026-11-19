@@ -250,3 +250,80 @@ test('an unmarked clickable row can also switch drafts while reviewing',async()=
   const r=await command({op:'apply',privateFill:true,token:scan.token,rows:[{id:'f0',value:'owner@example.test'}]});
   assert.equal(r[0].status,'stale');assert.equal(dom.window.document.querySelector('input').value,'');
 });
+
+test('form ownership, accessible names and local occupancy survive a review without sharing old values', async()=>{
+  const {dom,command}=fixture('<form id=a aria-label="Buyer"><label>Email<input name=email value=original></label></form><span id=who>Guest</span><form id=b aria-labelledby=who><label>Email<input name=email></label></form>');
+  const scan=command({op:'scan'});
+  assert.match(scan.fields[0].context,/Buyer/);
+  assert.match(scan.fields[1].context,/Guest/);
+  assert.deepEqual(Array.from(scan.occupiedIds),['f0']);
+  assert.doesNotMatch(JSON.stringify(scan.fields),/original|occupied/);
+  const el=dom.window.document.querySelector('input');
+  el.setAttribute('form','b');
+  const [result]=await command({op:'apply',token:scan.token,rows:[{id:'f0',value:'different'}]});
+  assert.equal(result.code,'form_changed');
+  assert.equal(el.value,'original');
+  dom.window.close();
+});
+
+test('final readback covers previously matching fields and controls disabled by a subsequent write',async()=>{
+  const {dom,command}=fixture('<form><label>A<input name=a value=yes></label><label>B<input name=b></label><label>C<input name=c></label></form>');
+  const [a,b,c]=dom.window.document.querySelectorAll('input');
+  c.oninput=()=>{a.value='changed';b.disabled=true;};
+  const scan=command({op:'scan'});
+  const results=await command({op:'apply',token:scan.token,rows:scan.fields.map(f=>({id:f.id,value:'yes'}))});
+  assert.deepEqual(Array.from(results,r=>r.status),['failed','failed','filled']);
+  assert.deepEqual(Array.from(results.slice(0,2),r=>[r.code,r.wrote]),[['value_changed',false],['disabled',true]]);
+  assert.equal(new dom.window.FormData(a.form).has('b'),false);
+  dom.window.close();
+});
+
+test('private verification reports a disabled destination and preserves the write count',async()=>{
+  const {dom,command}=privateFixture('<form><label>Name<input name=n></label></form>');
+  const el=dom.window.document.querySelector('input');
+  el.oninput=()=>{el.disabled=true;};
+  const scan=command({op:'scan',privateFill:true});
+  const [result]=await command({op:'apply',privateFill:true,token:scan.token,rows:[{id:'f0',value:'yes'}]});
+  assert.equal(result.code,'disabled');assert.equal(result.wrote,true);assert.equal(result.valueMatches,true);
+  assert.notEqual(result.status,'filled');
+  const [again]=await command({op:'verify',privateFill:true,token:scan.token});
+  assert.equal(again.code,'disabled');
+  dom.window.close();
+});
+
+test('scan failures cross the Chrome serialization boundary as distinct codes',()=>{
+  const {dom,command}=fixture('<label>Name<input></label>'.repeat(161));
+  assert.equal(command({op:'scan'}).error,'field_limit');
+  Object.defineProperty(dom.window.crypto,'randomUUID',{value:undefined});
+  assert.equal(command({op:'scan'}).error,'insecure_context');
+  dom.window.close();
+});
+
+test('a field initially rejected can match at final readback after another write',async()=>{
+  const {dom,command}=fixture('<form><label>A<input name=a></label><label>B<input name=b></label></form>');
+  const [a,b]=dom.window.document.querySelectorAll('input');
+  a.oninput=()=>{a.value='pending';};
+  b.oninput=()=>{a.value='done';};
+  const scan=command({op:'scan'});
+  const result=await command({op:'apply',token:scan.token,rows:scan.fields.map(({id})=>({id,value:'done'}))});
+  assert.deepEqual(Array.from(result,r=>[r.status,r.wrote,r.valueMatches]),[['filled',true,true],['filled',true,true]]);
+  assert.equal(new dom.window.FormData(a.form).get('a'),'done');
+  dom.window.close();
+});
+
+test('ambiguous select values are excluded even when the duplicate option is disabled',()=>{
+  const {dom,command}=fixture('<label>Choice<select><option disabled value=a>Retired</option><option value=a>Active</option></select></label>');
+  assert.equal(command({op:'scan'}).fields.length,0);
+  dom.window.close();
+});
+
+test('a disabled selected option cannot confirm a submitted value',async()=>{
+  const {dom,command}=fixture('<form><label>Choice<select name=choice><option value=b>Other</option><optgroup label=Group><option value=a>Active</option></optgroup></select></label></form>');
+  const el=dom.window.document.querySelector('select');
+  el.onchange=()=>{el.querySelector('optgroup').disabled=true;};
+  const scan=command({op:'scan'});
+  const [result]=await command({op:'apply',token:scan.token,rows:[{id:'f0',value:'a'}]});
+  assert.equal(result.code,'option_disabled');assert.equal(result.wrote,true);
+  assert.equal(result.valueMatches,true);
+  dom.window.close();
+});

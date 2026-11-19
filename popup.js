@@ -1,3 +1,4 @@
+import {scanErrorMessage,showSupport} from './support.js';
 import {evaluate} from './core.js';
 import {pageCommand} from './page.js';
 import {callJev} from './client.js';
@@ -8,8 +9,10 @@ export function startPopup(document, chrome, {evaluateFields=evaluate, requestAp
   let tabId,plan=null,rows=[],controller=null,busy=false,sourceVersion=0;
   const browserLanguage=chrome.i18n?.getUILanguage?.()||document.defaultView.navigator.language||'en';
   let language=resolveLanguage(undefined,browserLanguage),t=translator(language);
+  const manifest=chrome.runtime?.getManifest?.();
+  const report=operation=>showSupport(document,manifest,operation);
   const status=(text,error=false)=>{$('status').textContent=localizeMessage(text,language);$('status').classList.toggle('error',error);};
-  function buttons(value) {busy=value;for(const id of ['analyze','onepassword','apply','undo','clipboard','save-key','forget-key','clear','api-key','remember','language']) $(id).disabled=value; $('source').readOnly=value;document.querySelectorAll('#rows input').forEach(x=>{x.disabled=value;});$('cancel').hidden=!value; $('apply').disabled=value || !plan || !rows.some(x=>x.status==='ready');}
+  function buttons(value) {busy=value;for(const id of ['analyze','onepassword','apply','undo','clipboard','save-key','forget-key','clear','api-key','remember','language']) $(id).disabled=value; $('source').readOnly=value;document.querySelectorAll('#rows input').forEach(x=>{x.disabled=value;});$('cancel').hidden=!value || !controller; $('apply').disabled=value || !plan || !rows.some(x=>x.status==='ready');}
   function localizeUI() {
     document.documentElement.lang=language;
     document.querySelectorAll('[data-i18n]').forEach(element=>{element.textContent=t(element.dataset.i18n);});
@@ -18,12 +21,17 @@ export function startPopup(document, chrome, {evaluateFields=evaluate, requestAp
     $('target').textContent=localizeMessage($('target').textContent,language);
     $('status').textContent=localizeMessage($('status').textContent,language);
   }
-  function invalidate(){sourceVersion++;plan=null;rows=[];$('apply').disabled=true;$('results').hidden=true;$('diagnostics').value='';}
+  function invalidate(){sourceVersion++;plan=null;rows=[];$('apply').disabled=true;$('results').hidden=true;$('diagnostics').value='';$('supportPanel').hidden=true;$('support').value='';}
   async function command(request) {
     if (!tabId) throw new Error('対象ページを開いてから、拡張機能を開き直してください。');
-    const result=await chrome.scripting.executeScript({target:{tabId},func:pageCommand,args:[request],world:'ISOLATED'});
-    if(!result[0]?.result) throw new Error('このページではフォームにアクセスできません。');
-    return result[0].result;
+    try {
+      const [frame]=await chrome.scripting.executeScript({target:{tabId},func:pageCommand,args:[request],world:'ISOLATED'});
+      if (!frame?.result) throw new Error(t('noAccess'));
+      return frame.result;
+    } catch {
+      report({name:request.op,error:'no_access'});
+      throw new Error(t('noAccess'));
+    }
   }
   async function run(task) {
     if(busy) return;
@@ -37,14 +45,16 @@ export function startPopup(document, chrome, {evaluateFields=evaluate, requestAp
       const element=document.createElement(row.status==='ready'?'label':'div');element.className=`row ${['ready','filled','unchanged'].includes(row.status)?'':'skip'}`;
       const name=document.createElement('div');name.className='name';
       if(row.status==='ready') {const check=document.createElement('input');check.type='checkbox';check.checked=selectedIds===null||selectedIds.has(row.id);check.dataset.fieldId=row.id;name.append(check);}
-      name.append(document.createTextNode(row.field.label));element.append(name);
+      name.append(document.createTextNode(row.field.label));
+      if (row.occupied) name.append(document.createTextNode(' · '+t('occupiedHint')));
+      element.append(name);
       const context=document.createElement('div');context.className='context';context.textContent=row.field.context;element.append(context);
-      const value=document.createElement('div');value.className='value';value.textContent=['ready','filled','unchanged'].includes(row.status)?(row.field.kind==='checkbox'?t(row.value?'on':'off'):row.value===''?t('blank'):row.display):t('unchanged');element.append(value);
-      const reason=document.createElement('small');reason.textContent=localizeMessage(row.reason,language);element.append(reason);parent.append(element);
+      const value=document.createElement('div');value.className='value';value.textContent=(row.selected || ['ready','filled','unchanged'].includes(row.status))?(row.field.kind==='checkbox'?t(row.value?'on':'off'):row.value===''?t('blank'):row.display):t('unchanged');element.append(value);
+      const reason=document.createElement('small');reason.textContent=row.status==='not_selected'?t('notSelected'):localizeMessage(row.reason,language);element.append(reason);parent.append(element);
     }
     const ready=rows.filter(x=>x.status==='ready').length;
     $('count').textContent=t('count',{ready,total:rows.length});$('results').hidden=false;
-    $('diagnostics').value=JSON.stringify({version:chrome.runtime?.getManifest?.().version||'0.1.5',language,source:$('source').value,rows},null,2);
+    $('diagnostics').value=JSON.stringify({version:manifest?.version,language,source:$('source').value,rows},null,2);
   }
   $('language').addEventListener('change',()=>run(async()=>{
     const selectedIds=new Set([...document.querySelectorAll('#rows input:checked')].map(x=>x.dataset.fieldId));
@@ -81,14 +91,37 @@ export function startPopup(document, chrome, {evaluateFields=evaluate, requestAp
     if(source.includes(key)) throw new Error('文章に設定済みのAPIキーが含まれています。取り除いてください。');
     if(!source.trim()) throw new Error('元の文章を入力してください。');
     controller=new AbortController();
+    $('cancel').hidden=false;
     const signal=controller.signal;
     const scan=await command({op:'scan'});
-    if(scan.privatePage) throw new Error(t('opPrivatePage'));
-    if(!scan.fields.length) throw new Error('対応するフォーム項目が見つかりませんでした。折りたたまれた項目を開いてから、もう一度試してください。');
-    const analyzed=await evaluateFields(source,scan.fields,body=>requestApi(body,key,{signal}),message=>status(message));
+    if (scan.error) {
+      report({name:'scan',error:scan.error,fieldsFound:scan.fieldsFound});
+      throw new Error(scanErrorMessage(scan.error,t));
+    }
+    if (scan.privatePage || !scan.fields.length) {
+      report({name:'scan',error:scan.privatePage?'private_page':'no_fields'});
+      throw new Error(t(scan.privatePage?'opPrivatePage':'noFields'));
+    }
+    const analysis={name:'analyze',requests:0};
+    let analyzed;
+    try {
+      analyzed=await evaluateFields(source,scan.fields,body=>requestApi(body,key,{signal}),message=>status(message),step=>{
+        Object.assign(analysis,step);
+        analysis.requests++;
+      });
+    } catch (error) {
+      analysis.httpStatus=error.httpStatus;
+      analysis.error=error.name==='AbortError'?'cancelled':error.name==='TimeoutError'?'timeout':'request_failed';
+      report(analysis);
+      if (!analysis.requests || error.name==='AbortError') throw error;
+      const message=error.name==='TimeoutError'?t('timeout'):localizeMessage(error.message,language);
+      throw new Error(t('batchFailure',{...analysis,message}));
+    }
     signal.throwIfAborted();
     if (version!==sourceVersion || source!==$('source').value) throw new Error('文章が変わりました。もう一度候補を作ってください。');
-    rows=analyzed;
+    const occupied=new Set(scan.occupiedIds);
+    rows=analyzed.map(row=>({...row,occupied:occupied.has(row.id)}));
+    report(analysis);
     plan=scan;render();
     status(t(scan.unsupported?'proposalsReadyUnsupported':'proposalsReady'));
   }));
@@ -98,7 +131,13 @@ export function startPopup(document, chrome, {evaluateFields=evaluate, requestAp
     if(!ids.size) throw new Error('入力する項目を選んでください。');
     const result=await command({op:'apply',token:plan.token,rows:rows.filter(x=>x.status==='ready' && ids.has(x.id)).map(x=>({id:x.id,value:x.value}))});
     const filled=result.filter(x=>x.status==='filled').length,unchanged=result.filter(x=>x.status==='unchanged').length,failed=result.filter(x=>x.status==='failed'||x.status==='skip').length;
-    for(const item of result){const row=rows.find(x=>x.id===item.id);if(row){row.status=item.status;row.reason=item.reason;}}
+    for (const row of rows) {
+      row.selected=row.status==='ready' && ids.has(row.id);
+      const item=result.find(r=>r.id===row.id);
+      if (item) Object.assign(row,{status:item.status,reason:item.reason,code:item.code,wrote:item.wrote,valueMatches:item.valueMatches});
+      else if (row.status==='ready') row.status='not_selected';
+    }
+    report({name:'apply',results:rows});
     plan=null;render();status(`${filled}件を入力しました。${unchanged}件はすでに同じ値でした。${failed}件は設定できませんでした。フォームを確認してください。`,failed>0);
   }));
   $('undo').addEventListener('click',()=>run(async()=>{
